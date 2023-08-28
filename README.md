@@ -63,3 +63,13 @@ fn preemptive_schedule(I):
 fn generalize(S):
   # todo (involves ILP)
 ```
+
+Progress:
+
+- [x] (i)
+- [ ] (ii)
+- [ ] (iii)
+- [ ] (iv)
+- [ ] (v)
+- [ ] (vi)
+- [ ] (vii)
