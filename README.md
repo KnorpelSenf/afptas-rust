@@ -12,7 +12,7 @@ fn afptas(I, epsilon):
   let epsilon' = epsilon / 5
   let p_max = max(p0, ..., pn)
   
-  let I_groups = linear_grouping(I)
+  let I_groups = linear_grouping(J, epsilon, R)
   let (widest, ...I_sup) = I_groups
   assert length_wide_jobs(I_sup) <= 1 / (epsilon' ** 2)
 
@@ -40,6 +40,22 @@ fn afptas(I, epsilon):
 # (vii)
   let result = append_greedily(I_int, widest)
   return result
+
+fn linear_grouping(J, epsilon', R):
+  let threshold = epsilon' * R
+  let Jn = { j for (j, p, r) in J if r >= threshold }
+  let Jw = { j for (j, p, r) in J if r <  threshold }
+  
+  return strip_packing()
+
+fn strip_packing((w0,h0), ..., (wn,hn)):
+  # sorting by w
+  # let stack []
+  # loop over all j
+    # place on stack
+  # Pw = length(stack)
+  # perform linear grouping as in paper on page 1525, paragraph 1, left side
+  
 
 fn preemptive_schedule(I):
   # todo (involves LP)
