@@ -45,8 +45,10 @@ fn linear_grouping(J, epsilon', R):
   let threshold = epsilon' * R
   let Jn = { j for (j, p, r) in J if r >= threshold }
   let Jw = { j for (j, p, r) in J if r <  threshold }
-  
-  return strip_packing()
+
+# intepret resource consumption as width and
+# processing time as height
+  return strip_packing(Jw)
 
 fn strip_packing((w0,h0), ..., (wn,hn)):
   # sorting by w
@@ -58,7 +60,8 @@ fn strip_packing((w0,h0), ..., (wn,hn)):
   
 
 fn preemptive_schedule(I):
-  # todo (involves LP)
+  # find a minimal subset of C_I that satisfies 2.3, 2.4, 2.5
+  # and return this subset
 
 fn generalize(S):
   # todo (involves ILP)
