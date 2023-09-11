@@ -77,19 +77,27 @@ fn preemptive_schedule(I):
   max_min_resource_sharing(I)
 
 fn max_min_resource_sharing(I):
-  let C_I = all_possible_configurations(I)
-  let M = length(C_I)
-  let B = {x for x in R^M if sum(map(C_I, makespan_xC)) == 1}
+  let (J,_,_) = I
+  let C_I = all_valid_possible_configurations(I)
+  let M = length(J)
+
+  let B = {x for x in R^length(C_I) if norm_1(x) == 1}
+
+  # B is a [0,1]^n block of values that weight the diferent configurations.
+  # We now want to find x in B which adheres to the constraints and is optimal.
+  # We do this using Grigoriadis et al. and
+  # need to solve the block-problem along the way and
+  # need to solve an ILP along that way.
 
 fn frac_job_of_schedule(j, x, C_I):
   let (_, p, _) = j
-  return sum(map(C_I, C => num_contained_Cj(C) * makespan_xC(C) / p))
+  let sum = 0
+  for (let i = 0; i < length(C_I); i++):
+    sum += num_contained_Cj(C_I[i]) * x[i] / p
+  return sum
 
 fn num_contained_Cj(C):
   # return how many times j is in C
-
-fn makespan_xC(C):
-  # return the maximum makespan that a machine has
 
 fn generalize(S):
   # todo (involves ILP)
