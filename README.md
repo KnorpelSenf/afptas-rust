@@ -2,6 +2,18 @@
 
 This is a pseudo version of the algorithm that reflects our current understanding of the problem.
 
+## Progress
+
+- [x] (i)
+- [ ] (ii)
+- [ ] (iii)
+- [ ] (iv)
+- [ ] (v)
+- [ ] (vi)
+- [ ] (vii)
+
+## Algorithm in Pseudo
+
 ```pseudo
 fn afptas(I, epsilon):
   let (J,m,R) = I
@@ -66,13 +78,3 @@ fn preemptive_schedule(I):
 fn generalize(S):
   # todo (involves ILP)
 ```
-
-Progress:
-
-- [x] (i)
-- [ ] (ii)
-- [ ] (iii)
-- [ ] (iv)
-- [ ] (v)
-- [ ] (vi)
-- [ ] (vii)
