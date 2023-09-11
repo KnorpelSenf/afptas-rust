@@ -5,7 +5,7 @@ This is a pseudo version of the algorithm that reflects our current understandin
 ## Progress
 
 - [x] (i)
-- [ ] (ii)
+- [x] (ii)
 - [ ] (iii)
 - [ ] (iv)
 - [ ] (v)
@@ -58,8 +58,8 @@ fn linear_grouping(J, epsilon', R):
   let Jn = { j for (j, p, r) in J if r >= threshold }
   let Jw = { j for (j, p, r) in J if r <  threshold }
 
-# intepret resource consumption as width and
-# processing time as height
+  # intepret resource consumption as width and
+  # processing time as height
   return strip_packing(Jw)
 
 fn strip_packing((w0,h0), ..., (wn,hn)):
@@ -69,11 +69,27 @@ fn strip_packing((w0,h0), ..., (wn,hn)):
     # place on stack
   # Pw = length(stack)
   # perform linear grouping as in paper on page 1525, paragraph 1, left side
-  
+
 
 fn preemptive_schedule(I):
   # find a minimal subset of C_I that satisfies 2.3, 2.4, 2.5
   # and return this subset
+  max_min_resource_sharing(I)
+
+fn max_min_resource_sharing(I):
+  let C_I = all_possible_configurations(I)
+  let M = length(C_I)
+  let B = {x for x in R^M if sum(map(C_I, makespan_xC)) == 1}
+
+fn frac_job_of_schedule(j, x, C_I):
+  let (_, p, _) = j
+  return sum(map(C_I, C => num_contained_Cj(C) * makespan_xC(C) / p))
+
+fn num_contained_Cj(C):
+  # return how many times j is in C
+
+fn makespan_xC(C):
+  # return the maximum makespan that a machine has
 
 fn generalize(S):
   # todo (involves ILP)
