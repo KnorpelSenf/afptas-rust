@@ -19,16 +19,17 @@ fn afptas(I, epsilon):
   let (J,m,R) = I
   let n = length(J)
   let (j0,p0,r0), ..., (jn,pn,rn) = J
-  
+
 # (i)
   let epsilon' = epsilon / 5
   let p_max = max(p0, ..., pn)
-  
+
   let I_groups = linear_grouping(J, epsilon, R)
   let (widest, ...I_sup) = I_groups
   assert length_wide_jobs(I_sup) <= 1 / (epsilon' ** 2)
 
 # (ii)
+  # obtain a sparse bitvector (?) defining a configuration
   let x_pre = preemptive_schedule(I_sup)
   assert makespan(I_sup) <= (1 + epsilon') * OPT_pre
 
@@ -83,7 +84,7 @@ fn max_min_resource_sharing(I):
 
   let B = {x for x in R^length(C_I) if norm_1(x) == 1}
 
-  # B is a [0,1]^n block of values that weight the diferent configurations.
+  # B is a [0,1]^n block of values that weight the different configurations.
   # We now want to find x in B which adheres to the constraints and is optimal.
   # We do this using Grigoriadis et al. and
   # need to solve the block-problem along the way and
@@ -100,5 +101,5 @@ fn num_contained_Cj(C):
   # return how many times j is in C
 
 fn generalize(S):
-  # todo (involves ILP)
+  # generate an LP according to 2.6
 ```
