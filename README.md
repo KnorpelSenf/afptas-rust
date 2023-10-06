@@ -34,9 +34,8 @@ fn afptas(I, epsilon):
   assert makespan(I_sup) <= (1 + epsilon') * OPT_pre
 
 # (iii)
-  let x_gen = generalize(x_pre)
-  let (config, window) = x_gen
-  let (wr, wm) = window
+  let (x~, y~) = generalize(C_I', C_pre, C_W, x_pre)
+
 
 # (iv)
   group_somehow()
@@ -100,6 +99,26 @@ fn frac_job_of_schedule(j, x, C_I):
 fn num_contained_Cj(C):
   # return how many times j is in C
 
-fn generalize(S):
-  # generate an LP according to 2.6
+# C_I'  -- all configurations
+# Cpre  -- configurations from solution, corresponds with x_pre
+# C_W   -- all configurations of wide jobs, i.e. C|Jw
+# x_pre -- solution to previous LP
+fn generalize(C_I', Cpre, C_W, x_pre):
+  # lemma 2.2
+  let C_preW = { C|Jw for C in C_I' if processing_time(C, x_pre) > 0 }
+  Wpre = { w for (_, w) in C_preW }
+
+  x~ = []
+  for C in C_W:
+    sum = 0
+    for C' in Cpre:
+      if C'|Jw = C
+        # combine C with window from Wpre
+        main_window = max(Wpre)
+        sum += processing_time(Cred)
+    x~.push(sum)
+
+  y~ = []
+
+  return x~, y~
 ```
