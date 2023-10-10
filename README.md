@@ -112,13 +112,21 @@ fn generalize(C_I', Cpre, C_W, x_pre):
   for C in C_W:
     sum = 0
     for C' in Cpre:
-      if C'|Jw = C
+      if C'|Jw == C
         # combine C with window from Wpre
         main_window = max(Wpre)
-        sum += processing_time(Cred)
-    x~.push(sum)
+        sum += processing_time(C)
+    x~[C] = sum
 
-  y~ = []
+  y~ = [][]
+  for j in J_N:
+    for w in W:
+      sum = 0
+      for C in Cpre:
+        _, wc = C|J_W
+        if w == wc:
+          sum += C(j) * processing_time(C)
+      y~[j][w] = sum
 
   return x~, y~
 ```
