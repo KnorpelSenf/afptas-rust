@@ -6,9 +6,9 @@ This is a pseudo version of the algorithm that reflects our current understandin
 
 - [x] (i)
 - [x] (ii)
-- [ ] (iii)
-- [ ] (iv)
-- [ ] (v)
+- [x] (iii)
+- [x] (iv)
+- [x] (v)
 - [ ] (vi)
 - [ ] (vii)
 
@@ -34,16 +34,13 @@ fn afptas(I, epsilon):
   assert makespan(I_sup) <= (1 + epsilon') * OPT_pre
 
 # (iii)
-  let (x~, y~) = generalize(C_I', C_pre, C_W, x_pre)
-
+  let (Wpre, x~, y~) = generalize(C_I', C_pre, C_W, x_pre)
 
 # (iv)
-  group_somehow()
+  W' = group_by_resources(Wpre)
 
 # (v)
-  let ((x', y'), LPw) = solve(I_sup)
-  assert zeros(LPw) <= 4 + 3 / (epsilon' ** 2) + length(Jn)
-  assert lengthened_factor(LPw) <= 1 + epsilon'
+  let (x', y') = match_with_windows(W', x~, y~)
 
 # (vi)
   let I_int = integral_schedule(x', y', I_sup)
@@ -108,6 +105,8 @@ fn generalize(C_I', Cpre, C_W, x_pre):
   let C_preW = { C|Jw for C in C_I' if processing_time(C, x_pre) > 0 }
   Wpre = { w for (_, w) in C_preW }
 
+  # x~ is a vector that maps a
+  # generalized configuration -> sum of processing times of configurations where the wide jobs look similar
   x~ = []
   for C in C_W:
     sum = 0
@@ -118,7 +117,9 @@ fn generalize(C_I', Cpre, C_W, x_pre):
         sum += processing_time(C)
     x~[C] = sum
 
-  y~ = [][]
+  # y~ is a matrix that maps
+  # (a narrow job, a main window) -> how much of the job can be processed in the window
+  y' = [][]
   for j in J_N:
     for w in W:
       sum = 0
@@ -126,7 +127,11 @@ fn generalize(C_I', Cpre, C_W, x_pre):
         _, wc = C|J_W
         if w == wc:
           sum += C(j) * processing_time(C)
-      y~[j][w] = sum
+      y'[j][w] = sum
+   y~ = y'.flat()
 
-  return x~, y~
+  return Wpre, x~, y~
+
+fn group_by_resources(Wpre):
+  # group stuff as described around Figure 2
 ```
