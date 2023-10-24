@@ -43,7 +43,7 @@ fn afptas(I, epsilon):
   let (x', y') = match_with_windows(W', x~, y~)
 
 # (vi)
-  let I_int = integral_schedule(x', y', I_sup)
+  let I_int = integral_schedule(x', y')
   assert schedule is not lengthened by more than something
 
 # (vii)
@@ -134,4 +134,15 @@ fn generalize(C_I', Cpre, C_W, x_pre):
 
 fn group_by_resources(Wpre):
   # group stuff as described around Figure 2
+
+fn match_with_windows(W', x~, y~):
+  # compute x', y' as described at end of proof for lemma 2.3
+  return x', y'
+
+fn integral_schedule(x', y'):
+  # perform the operations as described in lemma 2.4
+
+fn append_greedily(I_int, widest):
+  I_int.push(...widest)
+  return I_int
 ```
