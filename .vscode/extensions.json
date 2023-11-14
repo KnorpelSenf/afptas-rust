@@ -1,0 +1,7 @@
+{
+    "recommendations": [
+        "goessner.mdmath",
+        "bierner.markdown-checkbox",
+        "davidanson.vscode-markdownlint"
+    ]
+}
