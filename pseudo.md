@@ -73,6 +73,7 @@ fn max_min_resource_sharing(I):
   # We do this using Grigoriadis et al. and
   # need to solve the block-problem along the way and
   # need to solve an ILP along that way.
+  # Idea: take xv, compute cost q, solve ILP to get x^, adjust xv, repeat
 
 fn frac_job_of_schedule(j, x, C_I):
   let (_, p, _) = j
