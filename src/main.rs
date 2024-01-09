@@ -13,7 +13,7 @@ fn main() {
         jobs.push((x, y));
     }
 
-    println!("{} {} {}", a, b, c);
+    println!("m:{}, R:{}, e:{}", m, R, e);
     for (x, y) in jobs {
         println!("{} {}", x, y);
     }
