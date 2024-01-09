@@ -8,11 +8,10 @@ use crate::pretty::pretty;
 
 fn main() {
     let in_data = parse();
-    println!("INPUT: {:?}", in_data);
+    println!("{:#?}", in_data);
 
     println!("Computing schedule");
     let schedule = compute_schedule(in_data);
-    println!("{:?}", schedule);
 
     println!("Done, result is:");
     println!("{}", pretty(schedule));
