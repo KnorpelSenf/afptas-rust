@@ -43,6 +43,5 @@ fn main() {
         },
     };
 
-    println!("m:{}, R:{}, e:{}", m, r, e);
     println!("{:?}", in_data);
 }
