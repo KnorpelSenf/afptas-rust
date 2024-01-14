@@ -8,7 +8,7 @@ pub struct InputData {
 pub struct Instance {
     pub machine_count: u32,
     pub resource_limit: f64,
-    pub jobs: Box<[Job]>,
+    pub jobs: Box<Vec<Job>>,
 }
 
 #[derive(Debug)]
