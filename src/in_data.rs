@@ -44,6 +44,7 @@ pub fn parse() -> InputData {
     };
     let jobs = job_file
         .iter()
+        .skip(1) // drop column headers
         .enumerate()
         .map(|(index, line)| {
             let mut cols = line.split(",").take(2);
