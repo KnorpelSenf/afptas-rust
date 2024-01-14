@@ -19,7 +19,7 @@ pub struct Job {
 }
 #[derive(Debug)]
 pub struct Schedule {
-    pub mapping: Box<[JobPosition]>,
+    pub mapping: Box<Vec<JobPosition>>,
 }
 
 #[derive(Debug)]
@@ -30,6 +30,6 @@ pub struct JobPosition {
 
 pub fn compute_schedule(_in_data: InputData) -> Schedule {
     Schedule {
-        mapping: Box::from([]),
+        mapping: Box::from(vec![]),
     }
 }
