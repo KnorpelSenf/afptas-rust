@@ -26,28 +26,20 @@ public class TestBinPacking{
         try{
             // try instance with given epsilon and the instance stored in sizes
             PrintStream io = System.out;
-            
-                
 
-                RobustRoundingFunction nround = new NewRobustRoundingFunction();
-                Input input = new TestInput(n-1,sizes[0]);
-                OnlineBinPacking obp = new OnlineBinPacking(nround,input);
-                obp.solve(epsilon);
-                io.println("Finished NEW");
+            RobustRoundingFunction nround = new NewRobustRoundingFunction();
+            Input input = new TestInput(n-1,sizes[0]);
+            OnlineBinPacking obp = new OnlineBinPacking(nround,input);
+            obp.solve(epsilon);
+            io.println("Finished NEW");
 
-                input = new TestInput(n-1,sizes[0]);
-                RobustRoundingFunction oround = new OldRobustRoundingFunction();
-                obp = new OnlineBinPacking(oround,input);
-                obp.solve(epsilon);
-                io.println("Finished OLD");
-
-            }
-        
-        catch(Exception e){
+            input = new TestInput(n-1,sizes[0]);
+            RobustRoundingFunction oround = new OldRobustRoundingFunction();
+            obp = new OnlineBinPacking(oround,input);
+            obp.solve(epsilon);
+            io.println("Finished OLD");
+        } catch(Exception e){
             System.out.println(e);
         }
     }
 }
-
-
-
