@@ -28,16 +28,16 @@ impl Configuration {
     fn machines(&self) -> u32 {
         self.jobs.iter().map(|pair| pair.1).sum()
     }
-    fn processing_time(&self) -> u32 {
+    fn processing_time(&self) -> f64 {
         self.jobs
             .iter()
-            .map(|pair| pair.1 * pair.0.processing_time)
+            .map(|pair| pair.1 as f64 * pair.0.processing_time)
             .sum()
     }
-    fn resource_amount(&self) -> u32 {
+    fn resource_amount(&self) -> f64 {
         self.jobs
             .iter()
-            .map(|pair| pair.1 * pair.0.resource_amount)
+            .map(|pair| pair.1 as f64 * pair.0.resource_amount)
             .sum()
     }
     fn is_valid(&self, instance: Instance) -> bool {
