@@ -1,0 +1,38 @@
+This is an implementation of the static online algorithm bin packing with migration
+described in "[Fully Dynamic Bin Packing Revisited](https://arxiv.org/pdf/1411.0960.pdf)" by Berndt, Jansen, and Klein (APPROX 2015; Math. Prog. 2018).
+
+For compilation, the [Apache Commons Math library](http://commons.apache.org/proper/commons-math/) needs to be downloaded.
+To compile, simply use
+```shell
+javac -cp commons-math3.jar:. TestBinPacking
+```
+
+To use the program, simply use:
+```shell
+java -c commons-math3.jar:. TestBinPacking inputFile
+```
+
+The inputFile is an XML file with the structure
+```xml
+<problem>
+<number size="<SIZE>">
+<number size="<SIZE>">
+<number size="<SIZE>">
+<number size="<SIZE>">
+...
+<number size="<SIZE>">
+</list>
+</problem>
+```
+
+
+For example, an instance containing three items with size 0.5, 0.4, and 0.2 is given as
+```xml
+<problem>
+<number size="0.5">
+<number size="0.4">
+<number size="0.2">
+</list>
+</problem>
+```
+
