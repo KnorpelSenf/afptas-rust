@@ -49,11 +49,9 @@ pub fn compute_schedule(in_data: InputData) -> Schedule {
     let (_epsilon_prime, epsilon_prime_squared, narrow_jobs, wide_jobs, _p_max) =
         preprocessing(epsilon, resource_limit, jobs);
 
-    println!("Wide {:?}", wide_jobs);
     println!("Narrow {:?}", narrow_jobs);
     let p_w: f64 = wide_jobs.iter().map(|job| job.processing_time).sum();
-    let groups = linear_grouping(epsilon_prime_squared * p_w, &wide_jobs);
-    println!("Grouped into {} groups", groups.len());
+    let groups = linear_grouping(epsilon_prime_squared * p_w, wide_jobs);
     for group in groups {
         println!("{:?}", group);
     }
@@ -89,7 +87,12 @@ fn preprocessing(
     )
 }
 
-fn linear_grouping(step: f64, jobs: &Vec<Job>) -> Vec<Vec<Job>> {
+fn linear_grouping(step: f64, jobs: Vec<Job>) -> Vec<Vec<Job>> {
+    // FIXME: Add special handling for the last group since we already know that
+    // all remaining jobs will be put into it. Due to floating point
+    // imprecision, it might happen that we accidentally open one group to many,
+    // containing a single job only, having the size of the floating point
+    // rounding error.
     if jobs.len() == 0 {
         return vec![];
     }
@@ -98,33 +101,35 @@ fn linear_grouping(step: f64, jobs: &Vec<Job>) -> Vec<Vec<Job>> {
     let mut groups: Vec<Vec<Job>> = vec![];
     let mut current_group: Vec<Job> = vec![];
     let mut current_processing_time = 0.0f64;
-    for (i, job) in jobs.iter().enumerate() {
+    for job in jobs.into_iter() {
         let mut remaining_processing_time = job.processing_time;
         loop {
+            let remaining_space = (groups.len() + 1) as f64 * step - current_processing_time;
             // Handle last iteration if the job fits entirely
-            if remaining_processing_time <= step {
+            if remaining_processing_time <= remaining_space {
                 let new_job = Job {
                     id: job_ids.next().unwrap(),
                     processing_time: remaining_processing_time,
                     resource_amount: job.resource_amount,
                 };
-                current_processing_time += new_job.processing_time;
+                current_processing_time += remaining_processing_time;
                 current_group.push(new_job);
                 break;
             }
 
             // Split off a bit of the job for the current group
-            let remaining_space = (i + 1) as f64 * step - current_processing_time;
             let new_job = Job {
                 id: job_ids.next().unwrap(),
                 processing_time: remaining_space,
                 resource_amount: job.resource_amount,
             };
-            current_processing_time += new_job.processing_time;
             current_group.push(new_job);
-            remaining_processing_time -= step;
             groups.push(current_group);
+
             current_group = vec![];
+
+            current_processing_time += remaining_space;
+            remaining_processing_time -= remaining_space;
         }
     }
     groups
