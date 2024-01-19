@@ -13,7 +13,7 @@ pub struct Instance {
     pub jobs: Box<Vec<Job>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Job {
     pub id: u32,
     pub processing_time: f64,
@@ -49,12 +49,10 @@ pub fn compute_schedule(in_data: InputData) -> Schedule {
     let (_epsilon_prime, epsilon_prime_squared, narrow_jobs, wide_jobs, _p_max) =
         preprocessing(epsilon, resource_limit, jobs);
 
+    println!("Wide {:?}", wide_jobs);
     println!("Narrow {:?}", narrow_jobs);
     let p_w: f64 = wide_jobs.iter().map(|job| job.processing_time).sum();
-    let groups = linear_grouping(epsilon_prime_squared * p_w, wide_jobs);
-    for group in groups {
-        println!("{:?}", group);
-    }
+    let i_sup = create_i_sup(epsilon_prime_squared, p_w, wide_jobs);
     Schedule {
         mapping: Box::from(vec![]),
     }
@@ -87,7 +85,30 @@ fn preprocessing(
     )
 }
 
-fn linear_grouping(step: f64, jobs: Vec<Job>) -> Vec<Vec<Job>> {
+fn create_i_sup(epsilon_prime_squared: f64, p_w: f64, wide_jobs: Vec<Job>) -> Vec<Job> {
+    let step = epsilon_prime_squared * p_w;
+    let mut job_ids = wide_jobs.last().expect("last job").id + 1..;
+    let groups = linear_grouping(step, &wide_jobs);
+    let additional_jobs = groups
+        .into_iter()
+        .map(|group| {
+            let resource_amount = group
+                .into_iter()
+                .max_by(compare_resource_amount)
+                .expect("empty group")
+                .resource_amount;
+            Job {
+                id: job_ids.next().unwrap(),
+                processing_time: step,
+                resource_amount,
+            }
+        })
+        .collect::<Vec<_>>();
+    println!("Adding {} jobs to generate I_sup", additional_jobs.len());
+    [wide_jobs, additional_jobs].concat()
+}
+
+fn linear_grouping(step: f64, jobs: &Vec<Job>) -> Vec<Vec<Job>> {
     // FIXME: Add special handling for the last group since we already know that
     // all remaining jobs will be put into it. Due to floating point
     // imprecision, it might happen that we accidentally open one group to many,
@@ -101,7 +122,7 @@ fn linear_grouping(step: f64, jobs: Vec<Job>) -> Vec<Vec<Job>> {
     let mut groups: Vec<Vec<Job>> = vec![];
     let mut current_group: Vec<Job> = vec![];
     let mut current_processing_time = 0.0f64;
-    for job in jobs.into_iter() {
+    for job in jobs.iter() {
         let mut remaining_processing_time = job.processing_time;
         loop {
             let remaining_space = (groups.len() + 1) as f64 * step - current_processing_time;
