@@ -40,7 +40,7 @@ pub fn compute_schedule(in_data: InputData) -> Schedule {
                 resource_limit,
             },
     } = in_data;
-    let jobs = jobs.iter().collect::<Vec<&Job>>();
+    let jobs = jobs.into_iter().collect::<Vec<Job>>();
 
     if 1.0 / epsilon >= machine_count.into() {
         unimplemented!("second case");
@@ -62,11 +62,11 @@ pub fn compute_schedule(in_data: InputData) -> Schedule {
     }
 }
 
-fn preprocessing<'a>(
+fn preprocessing(
     epsilon: f64,
     resource_limit: f64,
-    jobs: Vec<&'a Job>,
-) -> (f64, f64, Vec<&'a Job>, Vec<&'a Job>, f64) {
+    jobs: Vec<Job>,
+) -> (f64, f64, Vec<Job>, Vec<Job>, f64) {
     let epsilon_prime = epsilon / 5.0;
     let epsilon_prime_squared = epsilon_prime * epsilon_prime;
     let p_max = jobs
@@ -76,7 +76,7 @@ fn preprocessing<'a>(
         .processing_time;
     let threshold = epsilon_prime * resource_limit;
     let (narrow_jobs, mut wide_jobs) = jobs
-        .iter()
+        .into_iter()
         .partition::<Vec<_>, _>(|job| job.resource_amount < threshold);
     wide_jobs.sort_by(compare_resource_amount);
 
@@ -89,15 +89,16 @@ fn preprocessing<'a>(
     )
 }
 
-fn linear_grouping<'a>(step: f64, jobs: &Vec<&'a Job>) -> Vec<&'a mut Vec<Job>> {
+fn linear_grouping(step: f64, jobs: &Vec<Job>) -> Vec<Vec<Job>> {
     if jobs.len() == 0 {
         return vec![];
     }
     let mut job_ids = 0..;
-    let mut groups: Vec<&mut Vec<Job>> = vec![&mut vec![]];
+
+    let mut groups: Vec<Vec<Job>> = vec![];
+    let mut current_group: Vec<Job> = vec![];
     let mut current_processing_time = 0.0f64;
     for (i, job) in jobs.iter().enumerate() {
-        let current_group = groups.last().unwrap();
         let mut remaining_processing_time = job.processing_time;
         loop {
             // Handle last iteration if the job fits entirely
@@ -107,8 +108,8 @@ fn linear_grouping<'a>(step: f64, jobs: &Vec<&'a Job>) -> Vec<&'a mut Vec<Job>> 
                     processing_time: remaining_processing_time,
                     resource_amount: job.resource_amount,
                 };
-                current_group.push(new_job);
                 current_processing_time += new_job.processing_time;
+                current_group.push(new_job);
                 break;
             }
 
@@ -122,19 +123,20 @@ fn linear_grouping<'a>(step: f64, jobs: &Vec<&'a Job>) -> Vec<&'a mut Vec<Job>> 
             current_processing_time += new_job.processing_time;
             current_group.push(new_job);
             remaining_processing_time -= step;
-            groups.push(&mut vec![]); // open new group for the remaining part of the job
+            groups.push(current_group);
+            current_group = vec![];
         }
     }
     groups
 }
 
-fn compare_processing_time(job0: &&&Job, job1: &&&Job) -> Ordering {
+fn compare_processing_time(job0: &&Job, job1: &&Job) -> Ordering {
     job0.processing_time
         .partial_cmp(&job1.processing_time)
         .expect("invalid processing time")
 }
 
-fn compare_resource_amount(job0: &&Job, job1: &&Job) -> Ordering {
+fn compare_resource_amount(job0: &Job, job1: &Job) -> Ordering {
     job0.resource_amount
         .partial_cmp(&job1.resource_amount)
         .expect("invalid resource amount")
