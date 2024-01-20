@@ -6,13 +6,10 @@ mod max_min;
 mod pretty;
 
 use crate::algo::compute_schedule;
-use crate::ilp::example;
 use crate::in_data::parse;
 use crate::pretty::pretty;
 
 fn main() {
-    example();
-
     let in_data = parse();
     println!("{:#?}", in_data);
 
