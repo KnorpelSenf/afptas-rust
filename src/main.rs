@@ -1,9 +1,7 @@
 mod algo;
 mod in_data;
 mod knapsack;
-mod max_min;
 mod pretty;
-mod vector;
 
 use crate::algo::compute_schedule;
 use crate::in_data::parse;

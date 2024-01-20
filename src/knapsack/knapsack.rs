@@ -1,4 +1,4 @@
-use crate::max_min::KPItem;
+use crate::knapsack::max_min::KPItem;
 use std::{cmp::Ordering, collections::HashMap};
 
 #[derive(Clone)]
