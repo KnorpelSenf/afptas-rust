@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::collections::hash_map::Keys;
 use std::hash::Hash;
 
 pub struct Vector<T> {
@@ -11,17 +10,6 @@ impl<T: Eq + PartialEq + Hash + Clone> Vector<T> {
         Vector {
             map: HashMap::new(),
         }
-    }
-
-    pub fn copy_from(&mut self, other: &Vector<T>) {
-        self.map.clear();
-        for (t, value) in other.map.iter() {
-            self.put(t.clone(), *value);
-        }
-    }
-
-    pub fn get(&self, t: &T) -> Option<&f64> {
-        self.map.get(t)
     }
 
     pub fn add(&self, other: &Vector<T>) -> Vector<T> {
@@ -53,21 +41,4 @@ impl<T: Eq + PartialEq + Hash + Clone> Vector<T> {
             self.map.insert(t, n);
         }
     }
-
-    pub fn iter(&self) -> Keys<T, f64> {
-        self.map.keys()
-    }
-
-    pub fn sum(&self) -> f64 {
-        let mut sum = 0.0;
-        for value in self.map.values() {
-            sum += value;
-        }
-        sum
-    }
-
-    pub fn get_size(&self) -> usize {
-        self.map.len()
-    }
 }
-

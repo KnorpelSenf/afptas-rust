@@ -34,7 +34,7 @@ impl Hash for BPItem {
 }
 
 #[derive(Clone, Eq, PartialEq)]
-struct Pattern(HashMap<BPItem, i32>);
+pub struct Pattern(HashMap<BPItem, i32>);
 impl Hash for Pattern {
     fn hash<H: Hasher>(&self, state: &mut H) {
         for (k, v) in self.0.iter() {
@@ -207,11 +207,11 @@ fn compute_v(p: &[f64], fx: &[f64], fy: &[f64]) -> f64 {
     (a - b) / (b + a)
 }
 
-fn compute_tau(t: f64, theta: f64, v: f64, price: &[f64], fx: &[f64], fy: &[f64]) -> f64 {
-    let a = t * theta * v;
-    let b = 2.0 * fx.len() as f64 * (multiply(price, fx) + multiply(price, fy));
-    a / b
-}
+// fn compute_tau(t: f64, theta: f64, v: f64, price: &[f64], fx: &[f64], fy: &[f64]) -> f64 {
+//     let a = t * theta * v;
+//     let b = 2.0 * fx.len() as f64 * (multiply(price, fx) + multiply(price, fy));
+//     a / b
+// }
 
 fn compute_start(input: &Vec<BPItem>, m: usize) -> Vector<Pattern> {
     let mut res = Vector::new();
