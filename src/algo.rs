@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, collections::HashMap};
 
-use crate::knapsack::max_min::maxmin;
+use crate::max_min::max_min;
 
 #[derive(Debug)]
 pub struct InputData {
@@ -20,6 +20,12 @@ pub struct Job {
     pub id: u32,
     pub processing_time: f64,
     pub resource_amount: f64,
+}
+impl Job {
+    #[inline]
+    pub fn is_wide(&self, threshold: f64) -> bool {
+        self.resource_amount < threshold
+    }
 }
 impl PartialEq for Job {
     fn eq(&self, other: &Self) -> bool {
@@ -96,47 +102,41 @@ pub fn compute_schedule(in_data: InputData) -> Schedule {
     if 1.0 / epsilon >= machine_count.into() {
         unimplemented!("second case");
     }
-    let _n = jobs.len();
-    let (_epsilon_prime, epsilon_prime_squared, narrow_jobs, wide_jobs, _p_max) =
-        preprocessing(epsilon, resource_limit, jobs);
-
-    println!("Wide {:?}", wide_jobs);
-    println!("Narrow {:?}", narrow_jobs);
-    let p_w: f64 = wide_jobs.iter().map(|job| job.processing_time).sum();
-    let _i_sup = create_i_sup(epsilon_prime_squared, p_w, wide_jobs);
-
-    maxmin(vec![], &vec![], 0.0);
-
-    Schedule {
-        mapping: Box::from(vec![]),
-    }
-}
-
-fn preprocessing(
-    epsilon: f64,
-    resource_limit: f64,
-    jobs: Vec<Job>,
-) -> (f64, f64, Vec<Job>, Vec<Job>, f64) {
+    let n = jobs.len();
     let epsilon_prime = epsilon / 5.0;
     let epsilon_prime_squared = epsilon_prime * epsilon_prime;
+    let threshold = epsilon_prime * resource_limit;
     let p_max = jobs
         .iter()
         .max_by(compare_processing_time)
         .expect("no jobs found")
         .processing_time;
-    let threshold = epsilon_prime * resource_limit;
-    let (narrow_jobs, mut wide_jobs) = jobs
-        .into_iter()
-        .partition::<Vec<_>, _>(|job| job.resource_amount < threshold);
-    wide_jobs.sort_by(compare_resource_amount);
+    let (narrow_jobs, wide_jobs) = {
+        let (narrow_jobs, mut wide_jobs) = jobs
+            .into_iter()
+            .partition::<Vec<_>, _>(|job| job.is_wide(threshold));
+        wide_jobs.sort_by(compare_resource_amount);
+        (narrow_jobs, wide_jobs)
+    };
 
-    (
-        epsilon_prime,
-        epsilon_prime_squared,
-        narrow_jobs,
-        wide_jobs,
-        p_max,
-    )
+    println!("Wide {:?}", wide_jobs);
+    println!("Narrow {:?}", narrow_jobs);
+    let p_w: f64 = wide_jobs.iter().map(|job| job.processing_time).sum();
+    let i_sup = create_i_sup(epsilon_prime_squared, p_w, wide_jobs.clone());
+
+    let _ = max_min(
+        n,
+        epsilon,
+        &jobs,
+        threshold,
+        (1.0 / epsilon_prime) as u32,
+        machine_count,
+        resource_limit,
+    );
+
+    Schedule {
+        mapping: Box::from(vec![]),
+    }
 }
 
 fn create_i_sup(epsilon_prime_squared: f64, p_w: f64, wide_jobs: Vec<Job>) -> Vec<Job> {
