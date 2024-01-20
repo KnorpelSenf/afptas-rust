@@ -10,14 +10,14 @@ pub struct InputData {
 
 #[derive(Debug)]
 pub struct Instance {
-    pub machine_count: u32,
+    pub machine_count: i32,
     pub resource_limit: f64,
     pub jobs: Box<Vec<Job>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Job {
-    pub id: u32,
+    pub id: i32,
     pub processing_time: f64,
     pub resource_amount: f64,
 }
@@ -36,14 +36,14 @@ impl Eq for Job {}
 
 #[derive(Debug)]
 pub struct Configuration {
-    index: HashMap<u32, usize>, // job.id -> index in vec
-    pub jobs: Box<Vec<(Job, u32)>>,
+    index: HashMap<i32, usize>, // job.id -> index in vec
+    pub jobs: Box<Vec<(Job, i32)>>,
 }
 impl Configuration {
-    pub fn get(&self, job: Job) -> Option<u32> {
+    pub fn get(&self, job: Job) -> Option<i32> {
         Some(self.jobs[*self.index.get(&job.id)?].1)
     }
-    pub fn set(&mut self, job: Job, count: u32) {
+    pub fn set(&mut self, job: Job, count: i32) {
         match self.index.get(&job.id) {
             None => {
                 let i = self.jobs.len();
@@ -55,7 +55,7 @@ impl Configuration {
             }
         }
     }
-    pub fn machines(&self) -> u32 {
+    pub fn machines(&self) -> i32 {
         self.jobs.iter().map(|pair| pair.1).sum()
     }
     pub fn processing_time(&self) -> f64 {
@@ -83,7 +83,7 @@ pub struct Schedule {
 
 #[derive(Debug)]
 pub struct JobPosition {
-    pub machine: u32,
+    pub machine: i32,
     pub starting_time: f64,
 }
 
@@ -113,6 +113,7 @@ pub fn compute_schedule(in_data: InputData) -> Schedule {
         .processing_time;
     let (narrow_jobs, wide_jobs) = {
         let (narrow_jobs, mut wide_jobs) = jobs
+            .clone()
             .into_iter()
             .partition::<Vec<_>, _>(|job| job.is_wide(threshold));
         wide_jobs.sort_by(compare_resource_amount);
@@ -122,14 +123,14 @@ pub fn compute_schedule(in_data: InputData) -> Schedule {
     println!("Wide {:?}", wide_jobs);
     println!("Narrow {:?}", narrow_jobs);
     let p_w: f64 = wide_jobs.iter().map(|job| job.processing_time).sum();
-    let i_sup = create_i_sup(epsilon_prime_squared, p_w, wide_jobs.clone());
+    let i_sup = create_i_sup(epsilon_prime_squared, p_w, wide_jobs);
 
     let _ = max_min(
         n,
         epsilon,
         &jobs,
         threshold,
-        (1.0 / epsilon_prime) as u32,
+        (1.0 / epsilon_prime) as i32,
         machine_count,
         resource_limit,
     );

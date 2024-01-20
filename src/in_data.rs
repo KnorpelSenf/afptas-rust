@@ -19,7 +19,7 @@ struct Args {
     epsilon: f64,
 
     #[arg(short, long)]
-    machines: u32,
+    machines: i32,
 
     #[arg(short, long)]
     resource_limit: f64,
@@ -59,7 +59,7 @@ pub fn parse() -> InputData {
                 .parse::<f64>()
                 .expect(format!("cannot parse col 1 as int in row {}", index).as_str());
             Job {
-                id: index as u32,
+                id: index as i32,
                 processing_time: p,
                 resource_amount: r,
             }
