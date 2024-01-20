@@ -5,8 +5,8 @@ pub fn max_min(
     rho: f64,
     jobs: &Vec<Job>,
     narrow_threshold: f64,
-    wide_job_max_count: u32,
-    machine_count: u32,
+    wide_job_max_count: i32,
+    machine_count: i32,
     resource_limit: f64,
 ) -> Vec<f64> {
     // compute initial solution
@@ -51,8 +51,8 @@ fn solve_block_problem(
     s: Vec<f64>,
     jobs: &Vec<Job>,
     narrow_threshold: f64,
-    wide_job_max_count: u32,
-    machine_count: u32,
+    wide_job_max_count: i32,
+    machine_count: i32,
     resource_limit: f64,
 ) -> Vec<f64> {
     solve_ilp(
