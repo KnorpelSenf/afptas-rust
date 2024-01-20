@@ -1,5 +1,7 @@
 use std::cmp::Ordering;
 
+use crate::max_min::maxmin;
+
 #[derive(Debug)]
 pub struct InputData {
     pub epsilon: f64,
@@ -25,25 +27,25 @@ pub struct Configuration {
     pub jobs: Box<Vec<(Job, u32)>>,
 }
 impl Configuration {
-    fn machines(&self) -> u32 {
-        self.jobs.iter().map(|pair| pair.1).sum()
-    }
-    fn processing_time(&self) -> f64 {
-        self.jobs
-            .iter()
-            .map(|pair| pair.1 as f64 * pair.0.processing_time)
-            .sum()
-    }
-    fn resource_amount(&self) -> f64 {
-        self.jobs
-            .iter()
-            .map(|pair| pair.1 as f64 * pair.0.resource_amount)
-            .sum()
-    }
-    fn is_valid(&self, instance: Instance) -> bool {
-        self.machines() <= instance.machine_count
-            && self.resource_amount() <= instance.resource_limit
-    }
+    // fn machines(&self) -> u32 {
+    //     self.jobs.iter().map(|pair| pair.1).sum()
+    // }
+    // fn processing_time(&self) -> f64 {
+    //     self.jobs
+    //         .iter()
+    //         .map(|pair| pair.1 as f64 * pair.0.processing_time)
+    //         .sum()
+    // }
+    // fn resource_amount(&self) -> f64 {
+    //     self.jobs
+    //         .iter()
+    //         .map(|pair| pair.1 as f64 * pair.0.resource_amount)
+    //         .sum()
+    // }
+    // fn is_valid(&self, instance: Instance) -> bool {
+    //     self.machines() <= instance.machine_count
+    //         && self.resource_amount() <= instance.resource_limit
+    // }
 }
 
 #[derive(Debug)]
@@ -79,7 +81,9 @@ pub fn compute_schedule(in_data: InputData) -> Schedule {
     println!("Wide {:?}", wide_jobs);
     println!("Narrow {:?}", narrow_jobs);
     let p_w: f64 = wide_jobs.iter().map(|job| job.processing_time).sum();
-    let i_sup = create_i_sup(epsilon_prime_squared, p_w, wide_jobs);
+    let _i_sup = create_i_sup(epsilon_prime_squared, p_w, wide_jobs);
+
+    maxmin(vec![], &vec![], 0.0);
 
     Schedule {
         mapping: Box::from(vec![]),
