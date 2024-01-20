@@ -1,6 +1,6 @@
-use std::cmp::Ordering;
+use std::{cmp::Ordering, collections::HashMap};
 
-use crate::max_min::maxmin;
+use crate::knapsack::max_min::maxmin;
 
 #[derive(Debug)]
 pub struct InputData {
@@ -21,31 +21,53 @@ pub struct Job {
     pub processing_time: f64,
     pub resource_amount: f64,
 }
+impl PartialEq for Job {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+impl Eq for Job {}
 
 #[derive(Debug)]
 pub struct Configuration {
+    index: HashMap<u32, usize>, // job.id -> index in vec
     pub jobs: Box<Vec<(Job, u32)>>,
 }
 impl Configuration {
-    // fn machines(&self) -> u32 {
-    //     self.jobs.iter().map(|pair| pair.1).sum()
-    // }
-    // fn processing_time(&self) -> f64 {
-    //     self.jobs
-    //         .iter()
-    //         .map(|pair| pair.1 as f64 * pair.0.processing_time)
-    //         .sum()
-    // }
-    // fn resource_amount(&self) -> f64 {
-    //     self.jobs
-    //         .iter()
-    //         .map(|pair| pair.1 as f64 * pair.0.resource_amount)
-    //         .sum()
-    // }
-    // fn is_valid(&self, instance: Instance) -> bool {
-    //     self.machines() <= instance.machine_count
-    //         && self.resource_amount() <= instance.resource_limit
-    // }
+    pub fn get(&self, job: Job) -> Option<u32> {
+        Some(self.jobs[*self.index.get(&job.id)?].1)
+    }
+    pub fn set(&mut self, job: Job, count: u32) {
+        match self.index.get(&job.id) {
+            None => {
+                let i = self.jobs.len();
+                self.index.insert(job.id, i);
+                self.jobs.push((job, count));
+            }
+            Some(i) => {
+                self.jobs[*i] = (job, count);
+            }
+        }
+    }
+    pub fn machines(&self) -> u32 {
+        self.jobs.iter().map(|pair| pair.1).sum()
+    }
+    pub fn processing_time(&self) -> f64 {
+        self.jobs
+            .iter()
+            .map(|pair| pair.1 as f64 * pair.0.processing_time)
+            .sum()
+    }
+    pub fn resource_amount(&self) -> f64 {
+        self.jobs
+            .iter()
+            .map(|pair| pair.1 as f64 * pair.0.resource_amount)
+            .sum()
+    }
+    pub fn is_valid(&self, instance: Instance) -> bool {
+        self.machines() <= instance.machine_count
+            && self.resource_amount() <= instance.resource_limit
+    }
 }
 
 #[derive(Debug)]
