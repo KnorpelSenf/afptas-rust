@@ -1,5 +1,5 @@
-use crate::knapsack::lawler;
-use crate::vector::Vector;
+use crate::knapsack::knapsack::lawler;
+use crate::knapsack::vector::Vector;
 use std::hash::{Hash, Hasher};
 use std::{cmp::Ordering, collections::HashMap};
 
