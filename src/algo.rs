@@ -88,6 +88,7 @@ pub struct JobPosition {
 }
 
 pub fn compute_schedule(in_data: InputData) -> Schedule {
+    println!("Computing schedule");
     let InputData {
         epsilon,
         instance:
@@ -100,9 +101,8 @@ pub fn compute_schedule(in_data: InputData) -> Schedule {
     let jobs = jobs.into_iter().collect::<Vec<Job>>();
 
     if 1.0 / epsilon >= machine_count.into() {
-        unimplemented!("second case");
+        todo!("second case");
     }
-    let n = jobs.len();
     let epsilon_prime = epsilon / 5.0;
     let epsilon_prime_squared = epsilon_prime * epsilon_prime;
     let threshold = epsilon_prime * resource_limit;
@@ -120,13 +120,16 @@ pub fn compute_schedule(in_data: InputData) -> Schedule {
         (narrow_jobs, wide_jobs)
     };
 
+    println!(
+        "Jobs are partitioned as follows (resource threshold={}):",
+        threshold
+    );
     println!("Wide {:?}", wide_jobs);
     println!("Narrow {:?}", narrow_jobs);
     let p_w: f64 = wide_jobs.iter().map(|job| job.processing_time).sum();
     let i_sup = create_i_sup(epsilon_prime_squared, p_w, wide_jobs);
 
     let _ = max_min(
-        n,
         epsilon,
         &jobs,
         threshold,
@@ -159,7 +162,10 @@ fn create_i_sup(epsilon_prime_squared: f64, p_w: f64, wide_jobs: Vec<Job>) -> Ve
             }
         })
         .collect::<Vec<_>>();
-    println!("Adding {} jobs to generate I_sup", additional_jobs.len());
+    println!(
+        "Creating {} additional jobs to generate I_sup",
+        additional_jobs.len()
+    );
     [wide_jobs, additional_jobs].concat()
 }
 
