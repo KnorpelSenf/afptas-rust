@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, collections::HashMap};
 
-use crate::max_min::max_min;
+use crate::solve::max_min;
 
 #[derive(Debug)]
 pub struct InputData {
