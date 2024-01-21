@@ -164,7 +164,8 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
 
     let problem_data = ProblemData::from(instance);
     let (_narrow_jobs, wide_jobs): (Vec<Job>, Vec<Job>) = {
-        let (narrow_jobs, mut wide_jobs) = problem_data.clone()
+        let (narrow_jobs, mut wide_jobs) = problem_data
+            .clone()
             .jobs
             .into_iter()
             .partition::<Vec<_>, _>(|job| problem_data.is_wide(job));
@@ -290,14 +291,13 @@ fn max_min(problem_data: ProblemData) -> Vec<f64> {
         .map(|e| {
             solve_block_problem_ilp(e, 0.5, &problem_data)
                 .iter()
-                .map(|x| x * scale)
-                .collect()
+                .map(|x| *x as f64 * scale)
+                .collect::<Vec<_>>()
         })
         .fold(vec![0.0; m], |acc: Vec<f64>, x: Vec<f64>| {
             // vec add
             acc.iter().zip(x).map(|(x, y)| x + y).collect::<Vec<f64>>()
         });
-    println!("Initial solution is {:?}", solution);
 
     // iterate
     loop {
@@ -323,7 +323,7 @@ fn max_min(problem_data: ProblemData) -> Vec<f64> {
     solution
 }
 
-fn solve_block_problem_ilp(q: Vec<f64>, precision: f64, problem_data: &ProblemData) -> Vec<f64> {
+fn solve_block_problem_ilp(q: Vec<f64>, precision: f64, problem_data: &ProblemData) -> Vec<i32> {
     let ProblemData {
         machine_count,
         resource_limit,
@@ -353,7 +353,10 @@ fn solve_block_problem_ilp(q: Vec<f64>, precision: f64, problem_data: &ProblemDa
         .collect();
 
     let solution = prob.find_configuration();
-    let a_star: Vec<f64> = variables.iter().map(|&v| solution.value(v)).collect();
+    let a_star = variables
+        .iter()
+        .map(|v| solution.value(*v).round() as i32)
+        .collect::<Vec<i32>>();
     println!(
         "Solved block problem ILP (n={}) for {:?} with {:?}",
         jobs.len(),
