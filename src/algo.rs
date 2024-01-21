@@ -1,5 +1,3 @@
-use crate::algo::Job;
-use crate::solve::max_min;
 use good_lp::{
     constraint, default_solver, variable, variables, Expression, ProblemVariables, Solution,
     SolverModel, Variable,
@@ -39,15 +37,15 @@ impl PartialEq for Job {
 impl Eq for Job {}
 
 #[derive(Debug)]
-pub struct Configuration {
+struct Configuration {
     index: HashMap<i32, usize>, // job.id -> index in vec
-    pub jobs: Box<Vec<(Job, i32)>>,
+    jobs: Box<Vec<(Job, i32)>>,
 }
 impl Configuration {
-    pub fn get(&self, job: Job) -> Option<i32> {
+    fn get(&self, job: Job) -> Option<i32> {
         Some(self.jobs[*self.index.get(&job.id)?].1)
     }
-    pub fn set(&mut self, job: Job, count: i32) {
+    fn set(&mut self, job: Job, count: i32) {
         match self.index.get(&job.id) {
             None => {
                 let i = self.jobs.len();
@@ -59,22 +57,22 @@ impl Configuration {
             }
         }
     }
-    pub fn machines(&self) -> i32 {
+    fn machines(&self) -> i32 {
         self.jobs.iter().map(|pair| pair.1).sum()
     }
-    pub fn processing_time(&self) -> f64 {
+    fn processing_time(&self) -> f64 {
         self.jobs
             .iter()
             .map(|pair| pair.1 as f64 * pair.0.processing_time)
             .sum()
     }
-    pub fn resource_amount(&self) -> f64 {
+    fn resource_amount(&self) -> f64 {
         self.jobs
             .iter()
             .map(|pair| pair.1 as f64 * pair.0.resource_amount)
             .sum()
     }
-    pub fn is_valid(&self, instance: Instance) -> bool {
+    fn is_valid(&self, instance: Instance) -> bool {
         self.machines() <= instance.machine_count
             && self.resource_amount() <= instance.resource_limit
     }
@@ -233,7 +231,7 @@ fn compare_resource_amount(job0: &Job, job1: &Job) -> Ordering {
         .expect("invalid resource amount")
 }
 
-pub fn max_min(
+fn max_min(
     epsilon_prime: f64,
     jobs: &Vec<Job>,
     narrow_threshold: f64,
