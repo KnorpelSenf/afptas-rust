@@ -3,26 +3,22 @@ mod in_data;
 mod knapsack;
 mod pretty;
 
-use crate::algo::{compute_schedule, InputData, Instance};
+use crate::algo::{compute_schedule, Instance};
 use crate::in_data::parse;
 use crate::pretty::pretty;
 
 fn main() {
-    let in_data = parse();
+    let instance = parse();
 
-    let InputData {
+    let Instance {
         epsilon,
-        instance:
-            Instance {
-                ref jobs,
-                machine_count,
-                resource_limit,
-            },
-    } = in_data;
+        machine_count,
+        resource_limit,
+        ref jobs,
+    } = instance;
     println!("Scheduling {} jobs on {} machines with a resource limit of {} with epsilon={} close to OPT", jobs.len(), machine_count, resource_limit, epsilon);
 
-    let schedule = compute_schedule(in_data);
+    let schedule = compute_schedule(instance);
 
-    println!("Done, result is:");
-    println!("{}", pretty(schedule));
+    println!("Done, result is:\n{}", pretty(schedule));
 }

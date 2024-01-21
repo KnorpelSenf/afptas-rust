@@ -4,17 +4,72 @@ use good_lp::{
 };
 use std::{cmp::Ordering, collections::HashMap};
 
-#[derive(Debug)]
-pub struct InputData {
-    pub epsilon: f64,
-    pub instance: Instance,
-}
-
+// RAW INPUT DATA
 #[derive(Debug)]
 pub struct Instance {
+    pub epsilon: f64,
+    pub machine_count: i32,
+    pub resource_limit: f64,
+    pub jobs: Box<Vec<InstanceJob>>,
+}
+#[derive(Debug)]
+pub struct InstanceJob {
+    pub processing_time: f64,
+    pub resource_amount: f64,
+}
+
+// WORKING DATA
+#[derive(Debug, Clone)]
+pub struct ProblemData {
+    pub epsilon: f64,
+    pub epsilon_prime: f64,
+    pub epsilon_prime_squared: f64,
     pub machine_count: i32,
     pub resource_limit: f64,
     pub jobs: Box<Vec<Job>>,
+    pub p_max: f64,
+}
+impl ProblemData {
+    fn from(instance: Instance) -> Self {
+        let Instance {
+            epsilon,
+            machine_count,
+            resource_limit,
+            jobs,
+        } = instance;
+        let epsilon_prime = 0.2 * epsilon; // epsilon / 5
+        let p_max = jobs
+            .iter()
+            .max_by(|job0, job1| {
+                job0.processing_time
+                    .partial_cmp(&job1.processing_time)
+                    .expect("invalid processing time")
+            })
+            .expect("no jobs found")
+            .processing_time;
+
+        let mut job_ids = 0..;
+        ProblemData {
+            epsilon,
+            epsilon_prime,
+            epsilon_prime_squared: epsilon_prime * epsilon_prime,
+            machine_count,
+            resource_limit,
+            jobs: Box::from(
+                jobs.into_iter()
+                    .map(|job| Job {
+                        id: job_ids.next().unwrap(),
+                        processing_time: job.processing_time,
+                        resource_amount: job.resource_amount,
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+            p_max,
+        }
+    }
+    fn is_wide(&self, job: &Job) -> bool {
+        job.resource_amount >= self.epsilon_prime * self.resource_limit
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -23,12 +78,18 @@ pub struct Job {
     pub processing_time: f64,
     pub resource_amount: f64,
 }
-impl Job {
-    #[inline]
-    pub fn is_wide(&self, threshold: f64) -> bool {
-        self.resource_amount >= threshold
+impl PartialOrd for Job {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.resource_amount.partial_cmp(&other.resource_amount)
     }
 }
+impl Ord for Job {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other)
+            .expect("invalid resource amount, cannot compare jobs")
+    }
+}
+
 impl PartialEq for Job {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
@@ -89,72 +150,59 @@ pub struct JobPosition {
     pub starting_time: f64,
 }
 
-pub fn compute_schedule(in_data: InputData) -> Schedule {
+pub fn compute_schedule(instance: Instance) -> Schedule {
     println!("Computing schedule");
-    let InputData {
+    let Instance {
         epsilon,
-        instance:
-            Instance {
-                jobs,
-                machine_count,
-                resource_limit,
-            },
-    } = in_data;
-    let jobs = jobs.into_iter().collect::<Vec<Job>>();
+        machine_count,
+        ..
+    } = instance;
 
     if 1.0 / epsilon >= machine_count.into() {
         todo!("second case");
     }
-    let epsilon_prime = epsilon / 5.0;
-    let epsilon_prime_squared = epsilon_prime * epsilon_prime;
-    let threshold = epsilon_prime * resource_limit;
-    let p_max = jobs
-        .iter()
-        .max_by(compare_processing_time)
-        .expect("no jobs found")
-        .processing_time;
-    let (narrow_jobs, wide_jobs) = {
-        let (narrow_jobs, mut wide_jobs) = jobs
-            .clone()
+
+    let problem_data = ProblemData::from(instance);
+    let (_narrow_jobs, wide_jobs): (Vec<Job>, Vec<Job>) = {
+        let (narrow_jobs, mut wide_jobs) = problem_data.clone()
+            .jobs
             .into_iter()
-            .partition::<Vec<_>, _>(|job| job.is_wide(threshold));
-        wide_jobs.sort_by(compare_resource_amount);
+            .partition::<Vec<_>, _>(|job| problem_data.is_wide(job));
+        wide_jobs.sort();
         (narrow_jobs, wide_jobs)
     };
 
-    println!(
-        "Jobs are partitioned as follows (resource threshold={}):",
-        threshold
-    );
-    println!("Wide {:?}", wide_jobs);
-    println!("Narrow {:?}", narrow_jobs);
-    let p_w: f64 = wide_jobs.iter().map(|job| job.processing_time).sum();
-    let i_sup = create_i_sup(epsilon_prime_squared, p_w, wide_jobs);
+    // println!(
+    //     "Jobs are partitioned as follows (resource threshold={}):",
+    //     threshold
+    // );
+    // println!("Wide {:?}", wide_jobs);
+    // println!("Narrow {:?}", narrow_jobs);
 
-    let _ = max_min(
-        epsilon,
-        &jobs,
-        threshold,
-        (1.0 / epsilon_prime) as i32,
-        machine_count,
-        resource_limit,
-    );
+    let _i_sup = create_i_sup(wide_jobs, &problem_data);
+
+    let _ = max_min(problem_data);
 
     Schedule {
         mapping: Box::from(vec![]),
     }
 }
 
-fn create_i_sup(epsilon_prime_squared: f64, p_w: f64, wide_jobs: Vec<Job>) -> Vec<Job> {
+fn create_i_sup(wide_jobs: Vec<Job>, problem_data: &ProblemData) -> Vec<Job> {
+    let ProblemData {
+        epsilon_prime_squared,
+        ..
+    } = problem_data;
+    let p_w: f64 = wide_jobs.iter().map(|job| job.processing_time).sum();
     let step = epsilon_prime_squared * p_w;
-    let mut job_ids = wide_jobs.last().expect("last job").id + 1..;
+    let mut job_ids = (wide_jobs.last().expect("last job").id + 1)..;
     let groups = linear_grouping(step, &wide_jobs);
     let additional_jobs = groups
         .into_iter()
         .map(|group| {
             let resource_amount = group
                 .into_iter()
-                .max_by(compare_resource_amount)
+                .max()
                 .expect("empty group")
                 .resource_amount;
             Job {
@@ -164,10 +212,10 @@ fn create_i_sup(epsilon_prime_squared: f64, p_w: f64, wide_jobs: Vec<Job>) -> Ve
             }
         })
         .collect::<Vec<_>>();
-    println!(
-        "Creating {} additional jobs to generate I_sup",
-        additional_jobs.len()
-    );
+    // println!(
+    //     "Creating {} additional jobs to generate I_sup",
+    //     additional_jobs.len()
+    // );
     [wide_jobs, additional_jobs].concat()
 }
 
@@ -219,39 +267,36 @@ fn linear_grouping(step: f64, jobs: &Vec<Job>) -> Vec<Vec<Job>> {
     groups
 }
 
-fn compare_processing_time(job0: &&Job, job1: &&Job) -> Ordering {
-    job0.processing_time
-        .partial_cmp(&job1.processing_time)
-        .expect("invalid processing time")
-}
-
-fn compare_resource_amount(job0: &Job, job1: &Job) -> Ordering {
-    job0.resource_amount
-        .partial_cmp(&job1.resource_amount)
-        .expect("invalid resource amount")
-}
-
-fn max_min(
-    epsilon_prime: f64,
-    jobs: &Vec<Job>,
-    narrow_threshold: f64,
-    wide_job_max_count: i32,
-    machine_count: i32,
-    resource_limit: f64,
-) -> Vec<f64> {
-    let rho = epsilon_prime / (1.0 + epsilon_prime);
-    let n = jobs.len();
-    println!("Solving max-min for {} jobs with rho={}", n, rho);
-    let t = rho / 6.0;
+fn max_min(problem_data: ProblemData) -> Vec<f64> {
+    let ProblemData {
+        epsilon_prime,
+        ref jobs,
+        ..
+    } = problem_data;
     // compute initial solution;
+    let _rho = epsilon_prime / (1.0 + epsilon_prime);
     println!("Computing initial solution");
-    let mut solution = initial(
-        jobs,
-        narrow_threshold,
-        wide_job_max_count,
-        machine_count,
-        resource_limit,
-    ); // \v{x}
+    let m = jobs.len();
+    let scale = 1.0f64 / (m as f64);
+    macro_rules! unit {
+        ( $i:expr, $m:expr ) => {{
+            let mut temp_vec = vec![0.0f64; $m];
+            temp_vec[$i] = 1.0f64;
+            temp_vec
+        }};
+    }
+    let units = (0..m).map(|i| unit!(i, m));
+    let mut solution = units
+        .map(|e| {
+            solve_block_problem_ilp(e, 0.5, &problem_data)
+                .iter()
+                .map(|x| x * scale)
+                .collect()
+        })
+        .fold(vec![0.0; m], |acc: Vec<f64>, x: Vec<f64>| {
+            // vec add
+            acc.iter().zip(x).map(|(x, y)| x + y).collect::<Vec<f64>>()
+        });
     println!("Initial solution is {:?}", solution);
 
     // iterate
@@ -260,19 +305,12 @@ fn max_min(
         let price = compute_price(&solution);
         println!("++ Starting iteration with price {:?}", price);
         // solve block problem
-        let max = solve_block_problem_ilp(
-            price,
-            jobs,
-            narrow_threshold,
-            wide_job_max_count,
-            machine_count,
-            resource_limit,
-        );
+        let max = solve_block_problem_ilp(price, epsilon_prime, &problem_data);
         println!("Received block problem solution {:?}", max);
         // update solution = ((1-tau) * solution) + (tau * solution)
         let tau = compute_step_length();
         let one_minus_tau = 1.0 - tau;
-        for i in 0..n {
+        for i in 0..jobs.len() {
             solution[i] = one_minus_tau * solution[i] + tau * solution[i]
         }
         println!(
@@ -285,69 +323,29 @@ fn max_min(
     solution
 }
 
-macro_rules! unit {
-    ( $i:expr, $m:expr ) => {{
-        let mut temp_vec = vec![0.0f64; $m];
-        temp_vec[$i] = 1.0f64;
-        temp_vec
-    }};
-}
+fn solve_block_problem_ilp(q: Vec<f64>, precision: f64, problem_data: &ProblemData) -> Vec<f64> {
+    let ProblemData {
+        machine_count,
+        resource_limit,
+        ref jobs,
+        ..
+    } = problem_data;
+    let wide_job_max_count = (1.0 / precision) as i32;
+    let mut prob = Ilp::new(*machine_count, *resource_limit);
 
-fn initial(
-    jobs: &Vec<Job>,
-    narrow_threshold: f64,
-    wide_job_max_count: i32,
-    machine_count: i32,
-    resource_limit: f64,
-) -> Vec<f64> {
-    let m = jobs.len();
-    let scale = 1.0f64 / (m as f64);
-    let units = (0..m).map(|i| unit!(i, m));
-    units
-        .map(|e| {
-            solve_block_problem_ilp(e, jobs, narrow_threshold, 2, machine_count, resource_limit)
-                .iter()
-                .map(|x| x * scale)
-                .collect()
-        })
-        .fold(vec![0.0; m], |acc: Vec<f64>, x: Vec<f64>| {
-            // vec add
-            acc.iter().zip(x).map(|(x, y)| x + y).collect::<Vec<f64>>()
-        })
-}
-
-fn compute_step_length() -> f64 {
-    0.0
-}
-
-fn compute_price(q: &[f64]) -> Vec<f64> {
-    q.to_vec()
-}
-
-fn solve_block_problem_ilp(
-    q: Vec<f64>,
-    jobs: &Vec<Job>,
-    narrow_threshold: f64,
-    wide_job_max_count: i32,
-    machine_count: i32,
-    resource_limit: f64,
-) -> Vec<f64> {
-    let jobs = jobs;
-    let mut prob = Ilp::new(machine_count, resource_limit);
-
-    let variables: Vec<_> = q
+    let variables: Vec<_> = jobs
         .iter()
-        .zip(jobs)
+        .zip(q.clone())
         .map(|q_job| {
             let c = ConfigurationCandidate {
-                q: *q_job.0,
-                p: q_job.1.processing_time,
-                r: q_job.1.resource_amount,
-                max_a: if q_job.1.is_wide(narrow_threshold) {
+                p: q_job.0.processing_time,
+                r: q_job.0.resource_amount,
+                max_a: if problem_data.is_wide(q_job.0) {
                     wide_job_max_count
                 } else {
                     1
                 },
+                q: q_job.1,
             };
             // println!("Adding variable {:?}", c);
             prob.add(c)
@@ -363,6 +361,14 @@ fn solve_block_problem_ilp(
         a_star
     );
     a_star
+}
+
+fn compute_step_length() -> f64 {
+    0.0
+}
+
+fn compute_price(q: &[f64]) -> Vec<f64> {
+    q.to_vec()
 }
 
 #[derive(Debug)]
