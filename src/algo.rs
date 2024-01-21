@@ -140,6 +140,15 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
 
     let _i_sup = create_i_sup(wide_jobs, &problem_data);
 
+    let mut count = 0;
+    for (i, config) in enumerate_all_configurations(&problem_data).enumerate() {
+        if i % 100_000 == 0 {
+            println!("{i} {config:?}");
+        }
+        count += 1;
+    }
+    println!("Enumerated {count} configurations");
+
     let _ = max_min(problem_data);
 
     Schedule {
@@ -305,32 +314,35 @@ impl Configuration {
     // }
 }
 
-fn enumerate_all_configurations(problem: ProblemData) -> Vec<Configuration> {
+fn enumerate_all_configurations<'a>(
+    problem: &'a ProblemData,
+) -> Box<dyn Iterator<Item = Configuration> + 'a> {
     // get empty config
     let config = Configuration::empty();
     // make recursive call
-    search_configurations(&config, &problem, 0)
+    search_configurations(config, problem, 0)
 }
 
-fn search_configurations(
-    config: &Configuration,
-    problem: &ProblemData,
+fn search_configurations<'a>(
+    config: Configuration,
+    problem: &'a ProblemData,
     skip: usize,
-) -> Vec<Configuration> {
-    problem
+) -> Box<dyn Iterator<Item = Configuration> + 'a> {
+    let iterator = problem
         .jobs
         .iter()
         .skip(skip)
-        .filter(|job| config.can_add(job, problem))
-        .map(|job| Configuration::from(config, job))
-        .enumerate()
-        .flat_map(|(i, c)| {
-            let s = search_configurations(&c, problem, skip + i).into_iter();
-            once(c).chain(s).collect::<Vec<Configuration>>()
+        .filter_map(move |job| {
+            if config.can_add(job, problem) {
+                Some(Configuration::from(&config, job))
+            } else {
+                None
+            }
         })
-        .collect::<Vec<Configuration>>()
+        .enumerate()
+        .flat_map(move |(i, c)| once(c.clone()).chain(search_configurations(c, problem, skip + i)));
+    Box::new(iterator) as Box<dyn Iterator<Item = Configuration> + 'a>
 }
-
 // fn f(j: Job, x: &Vec<f64>) -> f64 {
 //     0.0
 // }
@@ -368,10 +380,7 @@ fn max_min(problem_data: ProblemData) -> Vec<f64> {
             acc.iter().zip(x).map(|(x, y)| x + y).collect::<Vec<f64>>()
         });
 
-    let fx = enumerate_all_configurations(problem_data.clone());
-    for config in fx.iter().enumerate() {
-        println!("{} {:?}", config.0, config.1)
-    }
+    let fx = enumerate_all_configurations(&problem_data);
     let fx = vec![]; // TODO: continue
 
     // iterate
