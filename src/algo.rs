@@ -24,7 +24,7 @@ pub struct Job {
 impl Job {
     #[inline]
     pub fn is_wide(&self, threshold: f64) -> bool {
-        self.resource_amount < threshold
+        self.resource_amount >= threshold
     }
 }
 impl PartialEq for Job {
