@@ -7,9 +7,8 @@ use std::iter::Iterator;
 
 use clap::Parser;
 
-use crate::algo::InputData;
 use crate::algo::Instance;
-use crate::algo::Job;
+use crate::algo::InstanceJob;
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -28,7 +27,7 @@ struct Args {
     job_file: String,
 }
 
-pub fn parse() -> InputData {
+pub fn parse() -> Instance {
     let args = Args::parse();
     println!("Parsing input data");
 
@@ -59,20 +58,17 @@ pub fn parse() -> InputData {
                 .expect(format!("missing col 1 in row {}", index).as_str())
                 .parse::<f64>()
                 .expect(format!("cannot parse col 1 as int in row {}", index).as_str());
-            Job {
-                id: index as i32,
+            InstanceJob {
                 processing_time: p,
                 resource_amount: r,
             }
         })
-        .collect::<Vec<Job>>();
+        .collect::<Vec<_>>();
 
-    InputData {
+    Instance {
         epsilon: args.epsilon,
-        instance: Instance {
-            machine_count: args.machines,
-            resource_limit: args.resource_limit,
-            jobs: Box::from(jobs),
-        },
+        machine_count: args.machines,
+        resource_limit: args.resource_limit,
+        jobs: Box::from(jobs),
     }
 }
