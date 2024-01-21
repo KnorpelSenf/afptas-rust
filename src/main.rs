@@ -1,9 +1,8 @@
 mod algo;
-mod ilp;
 mod in_data;
 mod knapsack;
-mod max_min;
 mod pretty;
+mod solve;
 
 use crate::algo::{compute_schedule, InputData, Instance};
 use crate::in_data::parse;
@@ -11,6 +10,7 @@ use crate::pretty::pretty;
 
 fn main() {
     let in_data = parse();
+
     let InputData {
         epsilon,
         instance:
