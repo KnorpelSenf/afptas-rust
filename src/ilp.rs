@@ -1,8 +1,8 @@
+use crate::algo::Job;
 use good_lp::{
     constraint, default_solver, variable, variables, Expression, ProblemVariables, Solution,
     SolverModel, Variable,
 };
-use crate::algo::Job;
 
 pub fn solve_ilp(
     q: Vec<f64>,
@@ -73,20 +73,21 @@ impl Ilp {
     }
 
     fn add(&mut self, job: ConfigurationCandidate, max: f64) -> Variable {
-        let v = self.vars.add(variable().integer().min(0).max(max));
+        let var = self.vars.add(variable().integer().min(0).max(max));
         self.objective += job.q * (job.a as f64) / job.p;
         self.machine_count += job.a;
         self.resource_limit += job.a as f64 * job.r;
-        v
+        var
     }
 
     fn find_configuration(self) -> impl Solution {
-        self.vars
+        let mut model = self
+            .vars
             .maximise(self.objective)
             .using(default_solver)
             .with(constraint!(self.machine_count <= self.machine_limit))
-            .with(constraint!(self.resource_amount <= self.resource_limit))
-            .solve()
-            .expect("no solution")
+            .with(constraint!(self.resource_amount <= self.resource_limit));
+        model.set_parameter("log", "0"); // suppress log output by solver
+        model.solve().expect("no ILP solution")
     }
 }
