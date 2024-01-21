@@ -2,7 +2,6 @@ mod algo;
 mod in_data;
 mod knapsack;
 mod pretty;
-mod solve;
 
 use crate::algo::{compute_schedule, InputData, Instance};
 use crate::in_data::parse;
