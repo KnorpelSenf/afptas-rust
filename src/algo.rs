@@ -2,7 +2,7 @@ use good_lp::{
     constraint, default_solver, variable, variables, Expression, ProblemVariables, Solution,
     SolverModel, Variable,
 };
-use std::{cmp::Ordering, collections::HashMap};
+use std::{cmp::Ordering, collections::HashMap, vec};
 
 // RAW INPUT DATA
 #[derive(Debug)]
@@ -22,6 +22,7 @@ pub struct InstanceJob {
 #[derive(Debug, Clone)]
 pub struct ProblemData {
     pub epsilon: f64,
+    pub epsilon_squared: f64,
     pub epsilon_prime: f64,
     pub epsilon_prime_squared: f64,
     pub machine_count: i32,
@@ -51,6 +52,7 @@ impl ProblemData {
         let mut job_ids = 0..;
         ProblemData {
             epsilon,
+            epsilon_squared: epsilon * epsilon,
             epsilon_prime,
             epsilon_prime_squared: epsilon_prime * epsilon_prime,
             machine_count,
@@ -96,48 +98,6 @@ impl PartialEq for Job {
     }
 }
 impl Eq for Job {}
-
-#[derive(Debug)]
-struct Configuration {
-    index: HashMap<i32, usize>, // job.id -> index in vec
-    jobs: Box<Vec<(Job, i32)>>,
-}
-impl Configuration {
-    fn get(&self, job: Job) -> Option<i32> {
-        Some(self.jobs[*self.index.get(&job.id)?].1)
-    }
-    fn set(&mut self, job: Job, count: i32) {
-        match self.index.get(&job.id) {
-            None => {
-                let i = self.jobs.len();
-                self.index.insert(job.id, i);
-                self.jobs.push((job, count));
-            }
-            Some(i) => {
-                self.jobs[*i] = (job, count);
-            }
-        }
-    }
-    fn machines(&self) -> i32 {
-        self.jobs.iter().map(|pair| pair.1).sum()
-    }
-    fn processing_time(&self) -> f64 {
-        self.jobs
-            .iter()
-            .map(|pair| pair.1 as f64 * pair.0.processing_time)
-            .sum()
-    }
-    fn resource_amount(&self) -> f64 {
-        self.jobs
-            .iter()
-            .map(|pair| pair.1 as f64 * pair.0.resource_amount)
-            .sum()
-    }
-    fn is_valid(&self, instance: Instance) -> bool {
-        self.machines() <= instance.machine_count
-            && self.resource_amount() <= instance.resource_limit
-    }
-}
 
 #[derive(Debug)]
 pub struct Schedule {
@@ -190,6 +150,7 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
 }
 
 fn create_i_sup(wide_jobs: Vec<Job>, problem_data: &ProblemData) -> Vec<Job> {
+    println!("Computing I_sup from {} wide jobs", wide_jobs.len());
     let ProblemData {
         epsilon_prime_squared,
         ..
@@ -213,20 +174,23 @@ fn create_i_sup(wide_jobs: Vec<Job>, problem_data: &ProblemData) -> Vec<Job> {
             }
         })
         .collect::<Vec<_>>();
-    // println!(
-    //     "Creating {} additional jobs to generate I_sup",
-    //     additional_jobs.len()
-    // );
+    println!(
+        "Obtained I_sup with {} additional jobs, totalling {} jobs",
+        additional_jobs.len(),
+        wide_jobs.len() + additional_jobs.len(),
+    );
     [wide_jobs, additional_jobs].concat()
 }
 
 fn linear_grouping(step: f64, jobs: &Vec<Job>) -> Vec<Vec<Job>> {
+    let n = jobs.len();
+    println!("Grouping {} jobs", n);
     // FIXME: Add special handling for the last group since we already know that
     // all remaining jobs will be put into it. Due to floating point
     // imprecision, it might happen that we accidentally open one group to many,
     // containing a single job only, having the size of the floating point
     // rounding error.
-    if jobs.len() == 0 {
+    if n == 0 {
         return vec![];
     }
     let mut job_ids = 0..;
@@ -265,11 +229,78 @@ fn linear_grouping(step: f64, jobs: &Vec<Job>) -> Vec<Vec<Job>> {
             remaining_processing_time -= remaining_space;
         }
     }
+    println!("Obtained {} groups", groups.len());
     groups
 }
 
-fn max_min(problem_data: ProblemData) -> Vec<f64> {
+#[derive(Debug)]
+struct Configuration {
+    jobs: HashMap<i32, i32>, // job.id -> how many times it is contained
+    processing_time: f64,
+    resource_amount: f64,
+}
+
+impl Configuration {
+    fn new(job_occurrences: Vec<(Job, i32)>) -> Self {
+        Configuration {
+            jobs: job_occurrences
+                .iter()
+                .fold(HashMap::new(), |mut hm, &(job, count)| {
+                    hm.insert(job.id, count);
+                    hm
+                }),
+            processing_time: job_occurrences
+                .iter()
+                .map(|&(job, count)| count as f64 * job.processing_time)
+                .sum(),
+            resource_amount: job_occurrences
+                .iter()
+                .map(|&(job, count)| count as f64 * job.resource_amount)
+                .sum(),
+        }
+    }
+    fn get(&self, job: &Job) -> Option<i32> {
+        Some(*self.jobs.get(&job.id)?)
+    }
+    // fn set(&mut self, job: Job, count: i32) {
+    //     match self.index.get(&job.id) {
+    //         None => {
+    //             let i = self.jobs.len();
+    //             self.index.insert(job.id, i);
+    //             self.jobs.push((job, count));
+    //         }
+    //         Some(i) => {
+    //             self.jobs[*i] = (job, count);
+    //         }
+    //     }
+    // }
+    // fn is_valid(&self, instance: Instance) -> bool {
+    //     self.machines() <= instance.machine_count
+    //         && self.resource_amount() <= instance.resource_limit
+    // }
+}
+
+fn enumerate_all_configurations(problem: ProblemData) -> Vec<Configuration> {
     let ProblemData {
+        epsilon,
+        epsilon_squared,
+        epsilon_prime,
+        epsilon_prime_squared,
+        machine_count,
+        resource_limit,
+        jobs,
+        p_max,
+    } = problem;
+}
+
+fn f(j: Job, x: &Vec<f64>) -> f64 {
+    0.0
+}
+
+fn max_min(problem_data: ProblemData) -> Vec<f64> {
+    println!("Solving max-min");
+    let ProblemData {
+        epsilon_squared,
         epsilon_prime,
         ref jobs,
         ..
@@ -299,10 +330,14 @@ fn max_min(problem_data: ProblemData) -> Vec<f64> {
             acc.iter().zip(x).map(|(x, y)| x + y).collect::<Vec<f64>>()
         });
 
+    let fx = vec![];
+
     // iterate
     loop {
         // price vector
-        let price = compute_price(&solution);
+        let prec = epsilon_squared / (m as f64);
+        let theta = find_theta(epsilon_prime, &fx, prec);
+        let price = compute_price(&fx, epsilon_prime, theta);
         println!("++ Starting iteration with price {:?}", price);
         // solve block problem
         let max = solve_block_problem_ilp(price, epsilon_prime, &problem_data);
@@ -366,12 +401,43 @@ fn solve_block_problem_ilp(q: Vec<f64>, precision: f64, problem_data: &ProblemDa
     a_star
 }
 
-fn compute_step_length() -> f64 {
-    0.0
+// find a theta binary search using 2.3
+// 2.3
+fn find_theta(t: f64, fx: &Vec<f64>, prec: f64) -> f64 {
+    let mut upper = *fx
+        .iter()
+        .min_by(|x, y| x.partial_cmp(y).unwrap_or(Ordering::Equal))
+        .expect("no min found while searching theta");
+    let mut lower = 0.0;
+    let mut act = (upper + lower) / 2.0;
+
+    while (act - (upper + lower) / 2.0).abs() > prec {
+        act = (upper + lower) / 2.0;
+        let val = compute_theta_f(t, act, fx);
+
+        if (val - 1.0).abs() < prec {
+            break;
+        } else if val - 1.0 < 0.0 {
+            lower = act;
+        } else {
+            upper = act;
+        }
+    }
+    act
 }
 
-fn compute_price(q: &[f64]) -> Vec<f64> {
-    q.to_vec()
+fn compute_theta_f(t: f64, theta: f64, fx: &Vec<f64>) -> f64 {
+    let sum: f64 = fx.iter().map(|x| theta / (*x - theta)).sum();
+    sum * (t / fx.len() as f64)
+}
+
+fn compute_price(fx: &Vec<f64>, t: f64, theta: f64) -> Vec<f64> {
+    let r = t / fx.len() as f64;
+    fx.iter().map(|x| r * theta / (*x - theta)).collect()
+}
+
+fn compute_step_length() -> f64 {
+    0.0
 }
 
 #[derive(Debug)]
