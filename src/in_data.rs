@@ -30,6 +30,7 @@ struct Args {
 
 pub fn parse() -> InputData {
     let args = Args::parse();
+    println!("Parsing input data");
 
     let job_file: Vec<String> = if args.job_file == "-" {
         stdin()

@@ -1,7 +1,6 @@
 use crate::{algo::Job, ilp::solve_ilp};
 
 pub fn max_min(
-    n: usize,
     rho: f64,
     jobs: &Vec<Job>,
     narrow_threshold: f64,
@@ -9,12 +8,17 @@ pub fn max_min(
     machine_count: i32,
     resource_limit: f64,
 ) -> Vec<f64> {
-    // compute initial solution
+    let n = jobs.len();
+    println!("Solving max-min for {} jobs with rho={}", n, rho);
+    // compute initial solution;
     let mut solution = initial(n); // \v{x}
-                                   // iterate
+    println!("Initial solution is {:?}", solution);
+
+    // iterate
     loop {
         // price vector
         let price = compute_price(&solution);
+        println!("++ Starting iteration with price {:?}", price);
         // solve block problem
         let max = solve_block_problem(
             price,
@@ -24,14 +28,20 @@ pub fn max_min(
             machine_count,
             resource_limit,
         );
+        println!("Received block problem solution {:?}", max);
         // update solution = ((1-tau) * solution) + (tau * solution)
         let tau = compute_step_length();
         let one_minus_tau = 1.0 - tau;
         for i in 0..n {
             solution[i] = one_minus_tau * solution[i] + tau * solution[i]
         }
+        println!(
+            "Updated solution with step length tau={} to be {:?}",
+            tau, solution
+        );
         break;
     }
+    println!("Max-min solved with {:?}", solution);
     solution
 }
 
@@ -55,7 +65,8 @@ fn solve_block_problem(
     machine_count: i32,
     resource_limit: f64,
 ) -> Vec<f64> {
-    solve_ilp(
+    println!("Solving block problem for {} jobs", jobs.len());
+    let solution = solve_ilp(
         s.clone(),
         jobs,
         narrow_threshold,
@@ -63,5 +74,6 @@ fn solve_block_problem(
         machine_count,
         resource_limit,
     );
-    s
+    println!("Solved block problem with {:?}", solution);
+    solution
 }
