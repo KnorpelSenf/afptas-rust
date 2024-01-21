@@ -19,7 +19,6 @@ pub fn max_min(
     // compute initial solution;
     println!("Computing initial solution");
     let mut solution = initial(
-        rho,
         jobs,
         narrow_threshold,
         wide_job_max_count,
@@ -68,7 +67,6 @@ macro_rules! unit {
 }
 
 fn initial(
-    rho: f64,
     jobs: &Vec<Job>,
     narrow_threshold: f64,
     wide_job_max_count: i32,
@@ -108,7 +106,6 @@ fn solve_block_problem_ilp(
     resource_limit: f64,
 ) -> Vec<f64> {
     let jobs = jobs;
-    let max = wide_job_max_count as f64;
     let mut prob = Ilp::new(machine_count, resource_limit);
 
     let variables: Vec<_> = q
@@ -119,17 +116,14 @@ fn solve_block_problem_ilp(
                 q: *q_job.0,
                 p: q_job.1.processing_time,
                 r: q_job.1.resource_amount,
-                a: 0,
+                max_a: if q_job.1.is_wide(narrow_threshold) {
+                    wide_job_max_count
+                } else {
+                    1
+                },
             };
             println!("Adding variable {:?}", c);
-            prob.add(
-                c,
-                if q_job.1.is_wide(narrow_threshold) {
-                    max
-                } else {
-                    1.
-                },
-            )
+            prob.add(c)
         })
         .collect();
 
@@ -149,7 +143,7 @@ struct ConfigurationCandidate {
     q: f64,
     p: f64,
     r: f64,
-    a: i32,
+    max_a: i32,
 }
 
 struct Ilp {
@@ -173,12 +167,13 @@ impl Ilp {
         }
     }
 
-    fn add(&mut self, job: ConfigurationCandidate, max: f64) -> Variable {
-        let var = self.vars.add(variable().integer().min(0).max(max));
-        self.objective += job.q * (job.a as f64) / job.p;
-        self.machine_count += job.a;
-        self.resource_limit += job.a as f64 * job.r;
-        var
+    fn add(&mut self, job: ConfigurationCandidate) -> Variable {
+        let ConfigurationCandidate { q, p, r, max_a } = job;
+        let a = self.vars.add(variable().integer().min(0).max(max_a));
+        self.objective += (q / p) * a;
+        self.machine_count += a;
+        self.resource_amount += r * a;
+        a
     }
 
     fn find_configuration(self) -> impl Solution {
