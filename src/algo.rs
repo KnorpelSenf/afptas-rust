@@ -140,14 +140,7 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
 
     let _i_sup = create_i_sup(wide_jobs, &problem_data);
 
-    // let _ = max_min(problem_data);
-
-    for config in enumerate_all_configurations(problem_data)
-        .iter()
-        .enumerate()
-    {
-        println!("{} {:?}", config.0, config.1)
-    }
+    let _ = max_min(problem_data);
 
     Schedule {
         mapping: Box::from(vec![]),
@@ -375,7 +368,11 @@ fn max_min(problem_data: ProblemData) -> Vec<f64> {
             acc.iter().zip(x).map(|(x, y)| x + y).collect::<Vec<f64>>()
         });
 
-    let fx = vec![];
+    let fx = enumerate_all_configurations(problem_data.clone());
+    for config in fx.iter().enumerate() {
+        println!("{} {:?}", config.0, config.1)
+    }
+    let fx = vec![]; // TODO: continue
 
     // iterate
     loop {
