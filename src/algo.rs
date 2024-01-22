@@ -405,12 +405,8 @@ fn max_min(problem_data: ProblemData) -> HashMap<Configuration, f64> {
     let units = (0..m).map(|i| unit(i, m));
     // job identifier -> number of times included in configuration -> how many times was it picked
     // (job.id -> C(j)) -> x_c
-    let x = HashMap::from_iter(
-        units
-            .map(|e| solve_block_problem_ilp(e, 0.5, &problem_data))
-            .into_iter()
-            .map(|c| (c, 1.0)),
-    );
+    let x =
+        HashMap::from_iter(units.map(|e| (solve_block_problem_ilp(e, 0.5, &problem_data), 1.0)));
     println!("Initial value is {x:?}");
 
     let fx: Vec<_> = jobs.iter().map(|job| (job, f(job, &x))).collect();
