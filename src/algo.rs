@@ -5,6 +5,7 @@ use good_lp::{
 use std::{
     cmp::Ordering,
     collections::HashMap,
+    fmt::Debug,
     hash::{Hash, Hasher},
     rc::Rc,
 };
@@ -82,7 +83,7 @@ impl ProblemData {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Job {
     pub id: i32,
     pub processing_time: f64,
@@ -99,13 +100,18 @@ impl Ord for Job {
             .expect("invalid resource amount, cannot compare jobs")
     }
 }
-
 impl PartialEq for Job {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 impl Eq for Job {}
+impl Debug for Job {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let id = self.id;
+        f.write_str(&format!("J{id}"))
+    }
+}
 
 #[derive(Debug)]
 pub struct Schedule {
@@ -131,20 +137,16 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     }
 
     let problem_data = ProblemData::from(instance);
-    // let (wide_jobs, narrow_jobs): (Vec<Job>, Vec<Job>) = {
-    //     let (mut wide_jobs, narrow_jobs) = problem_data
-    //         .clone()
-    //         .jobs
-    //         .into_iter()
-    //         .partition::<Vec<_>, _>(|job| problem_data.is_wide(job));
-    //     wide_jobs.sort();
-    //     (wide_jobs, narrow_jobs)
-    // };
 
-    // println!("Wide {:?}", wide_jobs);
-    // println!("Narrow {:?}", narrow_jobs);
-
-    // let _i_sup = create_i_sup(wide_jobs, &problem_data);
+    let _i_sup = create_i_sup(
+        problem_data
+            .jobs
+            .iter()
+            .filter(|job| problem_data.is_wide(job))
+            .map(|job| Rc::clone(job))
+            .collect(),
+        &problem_data,
+    );
 
     let _ = max_min(problem_data);
 
@@ -153,7 +155,7 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     }
 }
 
-fn create_i_sup(wide_jobs: Vec<Job>, problem_data: &ProblemData) -> Vec<Job> {
+fn create_i_sup(wide_jobs: Vec<Rc<Job>>, problem_data: &ProblemData) -> Vec<Rc<Job>> {
     println!("Computing I_sup from {} wide jobs", wide_jobs.len());
     let ProblemData {
         epsilon_prime_squared,
@@ -171,11 +173,11 @@ fn create_i_sup(wide_jobs: Vec<Job>, problem_data: &ProblemData) -> Vec<Job> {
                 .max()
                 .expect("empty group")
                 .resource_amount;
-            Job {
+            Rc::from(Job {
                 id: job_ids.next().unwrap(),
                 processing_time: step,
                 resource_amount,
-            }
+            })
         })
         .collect::<Vec<_>>();
     println!(
@@ -186,9 +188,9 @@ fn create_i_sup(wide_jobs: Vec<Job>, problem_data: &ProblemData) -> Vec<Job> {
     [wide_jobs, additional_jobs].concat()
 }
 
-fn linear_grouping(step: f64, jobs: &Vec<Job>) -> Vec<Vec<Job>> {
+fn linear_grouping(step: f64, jobs: &Vec<Rc<Job>>) -> Vec<Vec<Rc<Job>>> {
     let n = jobs.len();
-    println!("Grouping {} jobs", n);
+    println!("Grouping {} jobs: {jobs:?}", n);
     // FIXME: Add special handling for the last group since we already know that
     // all remaining jobs will be put into it. Due to floating point
     // imprecision, it might happen that we accidentally open one group to many,
@@ -199,8 +201,8 @@ fn linear_grouping(step: f64, jobs: &Vec<Job>) -> Vec<Vec<Job>> {
     }
     let mut job_ids = 0..;
 
-    let mut groups: Vec<Vec<Job>> = vec![];
-    let mut current_group: Vec<Job> = vec![];
+    let mut groups: Vec<Vec<Rc<Job>>> = vec![];
+    let mut current_group: Vec<Rc<Job>> = vec![];
     let mut current_processing_time = 0.0f64;
     for job in jobs.iter() {
         let mut remaining_processing_time = job.processing_time;
@@ -214,7 +216,7 @@ fn linear_grouping(step: f64, jobs: &Vec<Job>) -> Vec<Vec<Job>> {
                     resource_amount: job.resource_amount,
                 };
                 current_processing_time += remaining_processing_time;
-                current_group.push(new_job);
+                current_group.push(Rc::from(new_job));
                 break;
             }
 
@@ -224,7 +226,7 @@ fn linear_grouping(step: f64, jobs: &Vec<Job>) -> Vec<Vec<Job>> {
                 processing_time: remaining_space,
                 resource_amount: job.resource_amount,
             };
-            current_group.push(new_job);
+            current_group.push(Rc::from(new_job));
             groups.push(current_group);
 
             current_group = vec![];
@@ -237,15 +239,25 @@ fn linear_grouping(step: f64, jobs: &Vec<Job>) -> Vec<Vec<Job>> {
     groups
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct Configuration {
     jobs: Vec<(Rc<Job>, i32)>, // job.id -> how many times it is contained
     processing_time: f64,
     resource_amount: f64,
     machine_count: i32,
 }
+impl Debug for Configuration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Config")?;
+        f.debug_list().entries(&self.jobs).finish()?;
+        Ok(())
+    }
+}
 impl Configuration {
     fn new(jobs: &Vec<(Rc<Job>, i32)>) -> Self {
+        if jobs.windows(2).any(|pair| pair[0].0.id >= pair[1].0.id) {
+            panic!("jobs are out of order");
+        }
         Configuration {
             jobs: jobs.to_vec(),
             processing_time: jobs
@@ -289,6 +301,17 @@ impl Configuration {
     //         && self.resource_amount() <= instance.resource_limit
     // }
 }
+impl PartialEq for Configuration {
+    fn eq(&self, other: &Self) -> bool {
+        self.jobs.len() == other.jobs.len()
+            && self
+                .jobs
+                .iter()
+                .zip(&other.jobs)
+                .all(|((job0, count0), (job1, count1))| job0.id == job1.id && *count0 == *count1)
+    }
+}
+impl Eq for Configuration {}
 impl Hash for Configuration {
     fn hash<H: Hasher>(&self, state: &mut H) {
         for (job, count) in self.jobs.iter() {
@@ -361,7 +384,7 @@ fn unit(i: usize, m: usize) -> Vec<f64> {
     temp_vec
 }
 
-fn max_min(problem_data: ProblemData) -> Vec<Configuration> {
+fn max_min(problem_data: ProblemData) -> HashMap<Configuration, f64> {
     println!("Solving max-min");
     let ProblemData {
         epsilon_squared,
@@ -373,21 +396,18 @@ fn max_min(problem_data: ProblemData) -> Vec<Configuration> {
     let _rho = epsilon_prime / (1.0 + epsilon_prime);
     println!("Computing initial solution");
     let m = jobs.len();
-    let scale = 1.0f64 / (m as f64);
+    let scale = 1. / (m as f64);
     let units = (0..m).map(|i| unit(i, m));
     // job identifier -> number of times included in configuration -> how many times was it picked
     // (job.id -> C(j)) -> x_c
-    let mut x: HashMap<Configuration, f64>;
-    let mut solution: Vec<_> = units
+    let initial: Vec<Configuration> = units
         .map(|e| solve_block_problem_ilp(e, 0.5, &problem_data))
         .collect();
-    // .fold(vec![0.0; m], |acc: Vec<f64>, x: Vec<f64>| {
-    //     // vec add
-    //     acc.iter().zip(x).map(|(x, y)| x + y).collect::<Vec<f64>>()
-    // });
+    let scale = 1. / initial.len() as f64;
+    let mut x: HashMap<Configuration, f64> =
+        HashMap::from_iter(initial.into_iter().map(|c| (c, scale)));
+    println!("Initial value is {x:?}");
 
-    // let configurations: Vec<_> = enumerate_all_configurations(&problem_data).collect();
-    // let index = index_configurations(configurations);
     let fx = vec![]; // TODO: continue
 
     // iterate
@@ -408,12 +428,12 @@ fn max_min(problem_data: ProblemData) -> Vec<Configuration> {
         }
         println!(
             "Updated solution with step length tau={} to be {:?}",
-            tau, solution
+            tau, x
         );
         break;
     }
-    println!("Max-min solved with {:?}", solution);
-    solution
+    println!("Max-min solved with {:?}", x);
+    x
 }
 
 // job: 0 1 2
@@ -461,12 +481,13 @@ fn solve_block_problem_ilp(
         .collect();
 
     let solution = prob.find_configuration();
+
     let a_star: Vec<(Rc<Job>, i32)> = variables
         .into_iter()
         .map(|(job, var)| (job, solution.value(var) as i32))
-        .filter(|(_, var)| var != 0)
+        .filter(|(_, var)| *var != 0)
         .collect();
-    println!("Solved block problem ILP (n={}) for {:?}", jobs.len(), q);
+    println!("Solved ILP for {:?} with {:?}", q, a_star);
     Configuration::new(&a_star)
 }
 
