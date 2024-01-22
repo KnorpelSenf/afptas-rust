@@ -413,7 +413,9 @@ fn max_min(problem_data: ProblemData) -> HashMap<Configuration, f64> {
     );
     println!("Initial value is {x:?}");
 
-    let fx = vec![]; // TODO: continue
+    let fx: Vec<_> = jobs.iter().map(|job| (job, f(job, &x))).collect();
+    println!("f(x) = {:?}", fx);
+    let fx = fx.into_iter().map(|(_, x)| x).collect();
 
     // iterate
     loop {
