@@ -463,10 +463,8 @@ fn solve_block_problem_ilp(
     let solution = prob.find_configuration();
     let a_star: Vec<(Rc<Job>, i32)> = variables
         .into_iter()
-        .map(|(job, var)| {
-            let a = solution.value(var) as i32;
-            (job, a)
-        })
+        .map(|(job, var)| (job, solution.value(var) as i32))
+        .filter(|(_, var)| var != 0)
         .collect();
     println!("Solved block problem ILP (n={}) for {:?}", jobs.len(), q);
     Configuration::new(&a_star)
