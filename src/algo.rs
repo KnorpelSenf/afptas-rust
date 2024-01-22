@@ -2,7 +2,12 @@ use good_lp::{
     constraint, default_solver, variable, variables, Expression, ProblemVariables, Solution,
     SolverModel, Variable,
 };
-use std::{cmp::Ordering, collections::HashMap, iter::once};
+use std::{
+    cmp::Ordering,
+    collections::HashMap,
+    hash::{Hash, Hasher},
+    rc::Rc,
+};
 
 // RAW INPUT DATA
 #[derive(Debug)]
@@ -28,7 +33,7 @@ pub struct ProblemData {
     pub one_over_epsilon_prime: i32,
     pub machine_count: i32,
     pub resource_limit: f64,
-    pub jobs: Box<Vec<Job>>,
+    pub jobs: Vec<Rc<Job>>,
     pub p_max: f64,
 }
 impl ProblemData {
@@ -59,19 +64,20 @@ impl ProblemData {
             one_over_epsilon_prime: (1. / epsilon_prime) as i32,
             machine_count,
             resource_limit,
-            jobs: Box::from(
-                jobs.into_iter()
-                    .map(|job| Job {
+            jobs: jobs
+                .into_iter()
+                .map(|job| {
+                    Rc::new(Job {
                         id: job_ids.next().unwrap(),
                         processing_time: job.processing_time,
                         resource_amount: job.resource_amount,
                     })
-                    .collect::<Vec<_>>(),
-            ),
+                })
+                .collect(),
             p_max,
         }
     }
-    fn is_wide(&self, job: &Job) -> bool {
+    fn is_wide(&self, job: &Rc<Job>) -> bool {
         job.resource_amount >= self.epsilon_prime * self.resource_limit
     }
 }
@@ -125,29 +131,20 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     }
 
     let problem_data = ProblemData::from(instance);
-    let (wide_jobs, narrow_jobs): (Vec<Job>, Vec<Job>) = {
-        let (mut wide_jobs, narrow_jobs) = problem_data
-            .clone()
-            .jobs
-            .into_iter()
-            .partition::<Vec<_>, _>(|job| problem_data.is_wide(job));
-        wide_jobs.sort();
-        (wide_jobs, narrow_jobs)
-    };
+    // let (wide_jobs, narrow_jobs): (Vec<Job>, Vec<Job>) = {
+    //     let (mut wide_jobs, narrow_jobs) = problem_data
+    //         .clone()
+    //         .jobs
+    //         .into_iter()
+    //         .partition::<Vec<_>, _>(|job| problem_data.is_wide(job));
+    //     wide_jobs.sort();
+    //     (wide_jobs, narrow_jobs)
+    // };
 
-    println!("Wide {:?}", wide_jobs);
-    println!("Narrow {:?}", narrow_jobs);
+    // println!("Wide {:?}", wide_jobs);
+    // println!("Narrow {:?}", narrow_jobs);
 
-    let _i_sup = create_i_sup(wide_jobs, &problem_data);
-
-    let mut count = 0;
-    for (i, config) in enumerate_all_configurations(&problem_data).enumerate() {
-        if i % 100_000 == 0 {
-            println!("{i} {config:?}");
-        }
-        count += 1;
-    }
-    println!("Enumerated {count} configurations");
+    // let _i_sup = create_i_sup(wide_jobs, &problem_data);
 
     let _ = max_min(problem_data);
 
@@ -242,60 +239,39 @@ fn linear_grouping(step: f64, jobs: &Vec<Job>) -> Vec<Vec<Job>> {
 
 #[derive(Debug, Clone)]
 struct Configuration {
-    jobs: HashMap<i32, i32>, // job.id -> how many times it is contained
+    jobs: Vec<(Rc<Job>, i32)>, // job.id -> how many times it is contained
     processing_time: f64,
     resource_amount: f64,
     machine_count: i32,
 }
 impl Configuration {
-    fn empty() -> Self {
-        Configuration::new(vec![])
-    }
-    fn new(job_occurrences: Vec<(Job, i32)>) -> Self {
+    fn new(jobs: &Vec<(Rc<Job>, i32)>) -> Self {
         Configuration {
-            jobs: job_occurrences
-                .iter()
-                .fold(HashMap::new(), |mut hm, (job, count)| {
-                    hm.insert(job.id, *count);
-                    hm
-                }),
-            processing_time: job_occurrences
+            jobs: jobs.to_vec(),
+            processing_time: jobs
                 .iter()
                 .map(|(job, count)| *count as f64 * job.processing_time)
                 .sum(),
-            resource_amount: job_occurrences
+            resource_amount: jobs
                 .iter()
                 .map(|(job, count)| *count as f64 * job.resource_amount)
                 .sum(),
-            machine_count: job_occurrences.iter().map(|&(_, count)| count).sum(),
+            machine_count: jobs.iter().map(|&(_, count)| count).sum(),
         }
     }
-    fn from(configuration: &Configuration, job: &Job) -> Self {
-        Configuration {
-            jobs: {
-                let count = configuration.get(job).unwrap_or(0) + 1;
-                let mut hm = configuration.jobs.clone();
-                hm.insert(job.id, count);
-                hm
-            },
-            processing_time: configuration.processing_time + job.processing_time,
-            resource_amount: configuration.resource_amount + job.resource_amount,
-            machine_count: configuration.machine_count + 1,
-        }
-    }
-    fn get(&self, job: &Job) -> Option<i32> {
-        Some(*self.jobs.get(&job.id)?)
-    }
-    fn can_add(&self, job: &Job, problem: &ProblemData) -> bool {
-        self.get(job).unwrap_or(0) + 1
-            <= if problem.is_wide(job) {
-                problem.one_over_epsilon_prime
-            } else {
-                1
-            }
-            && self.machine_count + 1 <= problem.machine_count
-            && self.resource_amount + job.resource_amount <= problem.resource_limit
-    }
+    // fn get(&self, job: &Job) -> Option<i32> {
+    //     Some(*self.jobs.get(&job.id)?)
+    // }
+    // fn can_add(&self, job: &Job, problem: &ProblemData) -> bool {
+    //     self.get(job).unwrap_or(0) + 1
+    //         <= if problem.is_wide(job) {
+    //             problem.one_over_epsilon_prime
+    //         } else {
+    //             1
+    //         }
+    //         && self.machine_count + 1 <= problem.machine_count
+    //         && self.resource_amount + job.resource_amount <= problem.resource_limit
+    // }
     // fn set(&mut self, job: Job, count: i32) {
     //     match self.index.get(&job.id) {
     //         None => {
@@ -313,41 +289,79 @@ impl Configuration {
     //         && self.resource_amount() <= instance.resource_limit
     // }
 }
-
-fn enumerate_all_configurations<'a>(
-    problem: &'a ProblemData,
-) -> Box<dyn Iterator<Item = Configuration> + 'a> {
-    // get empty config
-    let config = Configuration::empty();
-    // make recursive call
-    search_configurations(config, problem, 0)
+impl Hash for Configuration {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for (job, count) in self.jobs.iter() {
+            job.id.hash(state);
+            count.hash(state);
+        }
+    }
 }
 
-fn search_configurations<'a>(
-    config: Configuration,
-    problem: &'a ProblemData,
-    skip: usize,
-) -> Box<dyn Iterator<Item = Configuration> + 'a> {
-    let iterator = problem
-        .jobs
-        .iter()
-        .skip(skip)
-        .filter_map(move |job| {
-            if config.can_add(job, problem) {
-                Some(Configuration::from(&config, job))
-            } else {
-                None
-            }
-        })
-        .enumerate()
-        .flat_map(move |(i, c)| once(c.clone()).chain(search_configurations(c, problem, skip + i)));
-    Box::new(iterator) as Box<dyn Iterator<Item = Configuration> + 'a>
-}
-// fn f(j: Job, x: &Vec<f64>) -> f64 {
+// fn enumerate_all_configurations<'a>(
+//     problem: &'a ProblemData,
+// ) -> Box<dyn Iterator<Item = Configuration> + 'a> {
+//     // get empty config
+//     let config = Configuration::empty();
+//     // make recursive call
+//     search_configurations(config, problem, 0)
+// }
+
+// fn search_configurations<'a>(
+//     config: Configuration,
+//     problem: &'a ProblemData,
+//     skip: usize,
+// ) -> Box<dyn Iterator<Item = Configuration> + 'a> {
+//     let iterator = problem
+//         .jobs
+//         .iter()
+//         .skip(skip)
+//         .filter_map(move |job| {
+//             if config.can_add(job, problem) {
+//                 Some(Configuration::from(&config, job))
+//             } else {
+//                 None
+//             }
+//         })
+//         .enumerate()
+//         .flat_map(move |(i, c)| once(c.clone()).chain(search_configurations(c, problem, skip + i)));
+//     Box::new(iterator) as Box<dyn Iterator<Item = Configuration> + 'a>
+// }
+
+// fn index_configurations(
+//     configurations: Vec<Rc<Configuration>>,
+// ) -> HashMap<i32, Vec<Rc<Configuration>>> {
+//     let mut index = HashMap::new();
+//     for config in configurations.into_iter() {
+//         for &job_id in config.jobs.keys() {
+//             match index.get_mut(&job_id) {
+//                 None => {
+//                     index.insert(job_id, vec![Rc::clone(&config)]);
+//                 }
+//                 Some(vec) => {
+//                     vec.push(Rc::clone(&config));
+//                 }
+//             }
+//         }
+//     }
+//     index
+// }
+
+// fn f(x: Vec<i32>, j: Job, c_i: Vec<Rc<Configuration>>) -> f64 {
+//     c_i.into_iter().map(|c| {
+//         let c_j = c.jobs.get(&j.id).unwrap_or(&0);
+//         let x_c = c.processing_time * x[c];
+//     });
 //     0.0
 // }
 
-fn max_min(problem_data: ProblemData) -> Vec<f64> {
+fn unit(i: usize, m: usize) -> Vec<f64> {
+    let mut temp_vec = vec![0.0f64; m];
+    temp_vec[i] = 1.0f64;
+    temp_vec
+}
+
+fn max_min(problem_data: ProblemData) -> Vec<Configuration> {
     println!("Solving max-min");
     let ProblemData {
         epsilon_squared,
@@ -360,27 +374,20 @@ fn max_min(problem_data: ProblemData) -> Vec<f64> {
     println!("Computing initial solution");
     let m = jobs.len();
     let scale = 1.0f64 / (m as f64);
-    macro_rules! unit {
-        ( $i:expr, $m:expr ) => {{
-            let mut temp_vec = vec![0.0f64; $m];
-            temp_vec[$i] = 1.0f64;
-            temp_vec
-        }};
-    }
-    let units = (0..m).map(|i| unit!(i, m));
-    let mut solution = units
-        .map(|e| {
-            solve_block_problem_ilp(e, 0.5, &problem_data)
-                .iter()
-                .map(|x| *x as f64 * scale)
-                .collect::<Vec<_>>()
-        })
-        .fold(vec![0.0; m], |acc: Vec<f64>, x: Vec<f64>| {
-            // vec add
-            acc.iter().zip(x).map(|(x, y)| x + y).collect::<Vec<f64>>()
-        });
+    let units = (0..m).map(|i| unit(i, m));
+    // job identifier -> number of times included in configuration -> how many times was it picked
+    // (job.id -> C(j)) -> x_c
+    let mut x: HashMap<Configuration, f64>;
+    let mut solution: Vec<_> = units
+        .map(|e| solve_block_problem_ilp(e, 0.5, &problem_data))
+        .collect();
+    // .fold(vec![0.0; m], |acc: Vec<f64>, x: Vec<f64>| {
+    //     // vec add
+    //     acc.iter().zip(x).map(|(x, y)| x + y).collect::<Vec<f64>>()
+    // });
 
-    let fx = enumerate_all_configurations(&problem_data);
+    // let configurations: Vec<_> = enumerate_all_configurations(&problem_data).collect();
+    // let index = index_configurations(configurations);
     let fx = vec![]; // TODO: continue
 
     // iterate
@@ -397,7 +404,7 @@ fn max_min(problem_data: ProblemData) -> Vec<f64> {
         let tau = compute_step_length();
         let one_minus_tau = 1.0 - tau;
         for i in 0..jobs.len() {
-            solution[i] = one_minus_tau * solution[i] + tau * solution[i]
+            // solution[i] = one_minus_tau * solution[i] + tau * solution[i]
         }
         println!(
             "Updated solution with step length tau={} to be {:?}",
@@ -409,47 +416,60 @@ fn max_min(problem_data: ProblemData) -> Vec<f64> {
     solution
 }
 
-fn solve_block_problem_ilp(q: Vec<f64>, precision: f64, problem_data: &ProblemData) -> Vec<i32> {
+// job: 0 1 2
+// vec: 1 0 5
+// -> config: (0: 1), (2, 5)
+
+// con: 0 1 2
+// x  : 1 0 5
+// x_c mit c=2 => 5
+// ->   5
+
+fn solve_block_problem_ilp(
+    q: Vec<f64>,
+    precision: f64,
+    problem_data: &ProblemData,
+) -> Configuration {
     let ProblemData {
         machine_count,
         resource_limit,
-        ref jobs,
+        jobs,
         ..
     } = problem_data;
     let wide_job_max_count = (1.0 / precision) as i32;
     let mut prob = Ilp::new(*machine_count, *resource_limit);
 
-    let variables: Vec<_> = jobs
+    let variables: Vec<(Rc<Job>, Variable)> = jobs
         .iter()
-        .zip(q.clone())
-        .map(|q_job| {
+        .zip(q.to_vec())
+        .map(|(job, q)| {
+            let job = Rc::clone(job);
             let c = ConfigurationCandidate {
-                p: q_job.0.processing_time,
-                r: q_job.0.resource_amount,
-                max_a: if problem_data.is_wide(q_job.0) {
+                p: job.processing_time,
+                r: job.resource_amount,
+                max_a: if problem_data.is_wide(&job) {
                     wide_job_max_count
                 } else {
                     1
                 },
-                q: q_job.1,
+                q,
             };
             // println!("Adding variable {:?}", c);
-            prob.add(c)
+            let var = prob.add(c);
+            (job, var)
         })
         .collect();
 
     let solution = prob.find_configuration();
-    let a_star = variables
-        .iter()
-        .map(|v| solution.value(*v).round() as i32)
-        .collect::<Vec<i32>>();
-    println!(
-        "Solved block problem ILP (n={}) for {:?} with {:?}",
-        jobs.len(),
-        q,
-        a_star
-    );
-    a_star
+    let a_star: Vec<(Rc<Job>, i32)> = variables
+        .into_iter()
+        .map(|(job, var)| {
+            let a = solution.value(var) as i32;
+            (job, a)
+        })
+        .collect();
+    println!("Solved block problem ILP (n={}) for {:?}", jobs.len(), q);
+    Configuration::new(&a_star)
 }
 
 // find a theta binary search using 2.3
