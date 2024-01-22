@@ -112,6 +112,11 @@ impl Debug for Job {
         f.write_str(&format!("J{id}"))
     }
 }
+impl Hash for Job {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
 
 #[derive(Debug)]
 pub struct Schedule {
@@ -241,7 +246,8 @@ fn linear_grouping(step: f64, jobs: &Vec<Rc<Job>>) -> Vec<Vec<Rc<Job>>> {
 
 #[derive(Clone)]
 struct Configuration {
-    jobs: Vec<(Rc<Job>, i32)>, // job.id -> how many times it is contained
+    /// job -> how many times it is contained
+    jobs: HashMap<Rc<Job>, i32>,
     processing_time: f64,
     resource_amount: f64,
     machine_count: i32,
@@ -254,12 +260,11 @@ impl Debug for Configuration {
     }
 }
 impl Configuration {
-    fn new(jobs: &Vec<(Rc<Job>, i32)>) -> Self {
+    fn new(jobs: Vec<(Rc<Job>, i32)>) -> Self {
         if jobs.windows(2).any(|pair| pair[0].0.id >= pair[1].0.id) {
             panic!("jobs are out of order");
         }
         Configuration {
-            jobs: jobs.to_vec(),
             processing_time: jobs
                 .iter()
                 .map(|(job, count)| *count as f64 * job.processing_time)
@@ -269,11 +274,13 @@ impl Configuration {
                 .map(|(job, count)| *count as f64 * job.resource_amount)
                 .sum(),
             machine_count: jobs.iter().map(|&(_, count)| count).sum(),
+            jobs: HashMap::from_iter(jobs),
         }
     }
-    // fn get(&self, job: &Job) -> Option<i32> {
-    //     Some(*self.jobs.get(&job.id)?)
-    // }
+    /// C(j)
+    fn job_count(&self, job: &Rc<Job>) -> i32 {
+        *self.jobs.get(job).unwrap_or(&0)
+    }
     // fn can_add(&self, job: &Job, problem: &ProblemData) -> bool {
     //     self.get(job).unwrap_or(0) + 1
     //         <= if problem.is_wide(job) {
@@ -370,13 +377,11 @@ impl Hash for Configuration {
 //     index
 // }
 
-// fn f(x: Vec<i32>, j: Job, c_i: Vec<Rc<Configuration>>) -> f64 {
-//     c_i.into_iter().map(|c| {
-//         let c_j = c.jobs.get(&j.id).unwrap_or(&0);
-//         let x_c = c.processing_time * x[c];
-//     });
-//     0.0
-// }
+fn f(j: &Rc<Job>, x: &HashMap<Configuration, f64>) -> f64 {
+    x.iter()
+        .map(|(c, x_c)| c.job_count(j) as f64 * x_c / j.processing_time)
+        .sum()
+}
 
 fn unit(i: usize, m: usize) -> Vec<f64> {
     let mut temp_vec = vec![0.0f64; m];
@@ -396,16 +401,16 @@ fn max_min(problem_data: ProblemData) -> HashMap<Configuration, f64> {
     let _rho = epsilon_prime / (1.0 + epsilon_prime);
     println!("Computing initial solution");
     let m = jobs.len();
-    let scale = 1. / (m as f64);
+    // let scale = 1. / (m as f64);
     let units = (0..m).map(|i| unit(i, m));
     // job identifier -> number of times included in configuration -> how many times was it picked
     // (job.id -> C(j)) -> x_c
-    let initial: Vec<Configuration> = units
-        .map(|e| solve_block_problem_ilp(e, 0.5, &problem_data))
-        .collect();
-    let scale = 1. / initial.len() as f64;
-    let mut x: HashMap<Configuration, f64> =
-        HashMap::from_iter(initial.into_iter().map(|c| (c, scale)));
+    let x = HashMap::from_iter(
+        units
+            .map(|e| solve_block_problem_ilp(e, 0.5, &problem_data))
+            .into_iter()
+            .map(|c| (c, 1.0)),
+    );
     println!("Initial value is {x:?}");
 
     let fx = vec![]; // TODO: continue
@@ -422,10 +427,10 @@ fn max_min(problem_data: ProblemData) -> HashMap<Configuration, f64> {
         println!("Received block problem solution {:?}", max);
         // update solution = ((1-tau) * solution) + (tau * solution)
         let tau = compute_step_length();
-        let one_minus_tau = 1.0 - tau;
-        for i in 0..jobs.len() {
-            // solution[i] = one_minus_tau * solution[i] + tau * solution[i]
-        }
+        // let one_minus_tau = 1.0 - tau;
+        // for i in 0..jobs.len() {
+        // solution[i] = one_minus_tau * solution[i] + tau * solution[i]
+        // }
         println!(
             "Updated solution with step length tau={} to be {:?}",
             tau, x
@@ -488,7 +493,7 @@ fn solve_block_problem_ilp(
         .filter(|(_, var)| *var != 0)
         .collect();
     println!("Solved ILP for {:?} with {:?}", q, a_star);
-    Configuration::new(&a_star)
+    Configuration::new(a_star)
 }
 
 // find a theta binary search using 2.3
