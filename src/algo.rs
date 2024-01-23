@@ -465,6 +465,7 @@ fn solve_block_problem_ilp(
     let variables: Vec<(Rc<Job>, Variable)> = jobs
         .iter()
         .zip(q.to_vec())
+        .filter(|(_, q)| *q > 0.0)
         .map(|(job, q)| {
             let job = Rc::clone(job);
             let c = ConfigurationCandidate {
