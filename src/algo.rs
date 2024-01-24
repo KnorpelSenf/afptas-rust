@@ -264,16 +264,18 @@ impl Configuration {
         if jobs.windows(2).any(|pair| pair[0].0.id >= pair[1].0.id) {
             panic!("jobs are out of order");
         }
+        let (processing_time, resource_amount, machine_count) =
+            jobs.iter().fold((0.0, 0.0, 0), |(p, r, m), (job, count)| {
+                (
+                    p + job.processing_time * *count as f64,
+                    r + job.resource_amount * *count as f64,
+                    m + *count,
+                )
+            });
         Configuration {
-            processing_time: jobs
-                .iter()
-                .map(|(job, count)| *count as f64 * job.processing_time)
-                .sum(),
-            resource_amount: jobs
-                .iter()
-                .map(|(job, count)| *count as f64 * job.resource_amount)
-                .sum(),
-            machine_count: jobs.iter().map(|&(_, count)| count).sum(),
+            processing_time,
+            resource_amount,
+            machine_count,
             jobs: HashMap::from_iter(jobs),
         }
     }
@@ -310,12 +312,9 @@ impl Configuration {
 }
 impl PartialEq for Configuration {
     fn eq(&self, other: &Self) -> bool {
-        self.jobs.len() == other.jobs.len()
-            && self
-                .jobs
-                .iter()
-                .zip(&other.jobs)
-                .all(|((job0, count0), (job1, count1))| job0.id == job1.id && *count0 == *count1)
+        self.processing_time == other.processing_time
+            && self.resource_amount == other.resource_amount
+            && self.machine_count == other.machine_count
     }
 }
 impl Eq for Configuration {}
