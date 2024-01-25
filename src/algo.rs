@@ -448,7 +448,12 @@ fn max_min(problem_data: ProblemData) -> Selection {
         let v = compute_v(&price, &fx, &fy);
         println!("v = {v}");
         if v < epsilon_prime {
-            x.scale(1.0 / fx.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap());
+            x.scale(
+                1.0 / fx
+                    .iter()
+                    .min_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
+                    .unwrap_or(&1.0),
+            );
             break;
         }
         // update solution = ((1-tau) * solution) + (tau * solution)
