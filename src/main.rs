@@ -1,6 +1,5 @@
 mod algo;
 mod in_data;
-mod knapsack;
 mod pretty;
 
 use crate::algo::{compute_schedule, Instance};

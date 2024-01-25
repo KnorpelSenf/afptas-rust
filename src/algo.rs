@@ -312,9 +312,7 @@ impl Configuration {
 }
 impl PartialEq for Configuration {
     fn eq(&self, other: &Self) -> bool {
-        self.processing_time == other.processing_time
-            && self.resource_amount == other.resource_amount
-            && self.machine_count == other.machine_count
+        self.jobs.eq(&other.jobs)
     }
 }
 impl Eq for Configuration {}
@@ -376,21 +374,38 @@ impl Hash for Configuration {
 //     index
 // }
 
-fn f(j: &Rc<Job>, x: &HashMap<Configuration, f64>) -> f64 {
-    x.iter()
+#[derive(Debug)]
+struct Selection(HashMap<Configuration, f64>);
+impl Selection {
+    fn init(iter: impl IntoIterator<Item = (Configuration, f64)>) -> Self {
+        Selection(HashMap::from_iter(iter))
+    }
+
+    fn interpolate(self: &mut Self, s: Selection, tau: f64) {
+        self.0.values_mut().for_each(|v| *v *= 1.0 - tau);
+        s.0.into_iter().for_each(|(c, v)| {
+            let old = self.0.get(&c).unwrap_or(&0.0);
+            self.0.insert(c, v * tau + old);
+        });
+    }
+}
+
+fn f(j: &Rc<Job>, x: &Selection) -> f64 {
+    x.0.iter()
         .map(|(c, x_c)| c.job_count(j) as f64 * x_c / j.processing_time)
         .sum()
 }
 
 fn unit(i: usize, m: usize) -> Vec<f64> {
-    let mut temp_vec = vec![0.0f64; m];
-    temp_vec[i] = 1.0f64;
+    let mut temp_vec = vec![0.0; m];
+    temp_vec[i] = 1.0;
     temp_vec
 }
 
-fn max_min(problem_data: ProblemData) -> HashMap<Configuration, f64> {
+fn max_min(problem_data: ProblemData) -> Selection {
     println!("Solving max-min");
     let ProblemData {
+        epsilon,
         epsilon_squared,
         epsilon_prime,
         ref jobs,
@@ -400,34 +415,45 @@ fn max_min(problem_data: ProblemData) -> HashMap<Configuration, f64> {
     let _rho = epsilon_prime / (1.0 + epsilon_prime);
     println!("Computing initial solution");
     let m = jobs.len();
-    // let scale = 1. / (m as f64);
-    let units = (0..m).map(|i| unit(i, m));
-    // job identifier -> number of times included in configuration -> how many times was it picked
-    // (job.id -> C(j)) -> x_c
-    let x =
-        HashMap::from_iter(units.map(|e| (solve_block_problem_ilp(e, 0.5, &problem_data), 1.0)));
+    let mut x = Selection::init((0..m).map(|i| {
+        (
+            solve_block_problem_ilp(&unit(i, m), 0.5, &problem_data),
+            1.0 / m as f64,
+        )
+    }));
     println!("Initial value is {x:?}");
-
-    let fx: Vec<_> = jobs.iter().map(|job| (job, f(job, &x))).collect();
-    println!("f(x) = {:?}", fx);
-    let fx = fx.into_iter().map(|(_, x)| x).collect();
 
     // iterate
     loop {
+        let fx: Vec<f64> = jobs.iter().map(|job| f(job, &x)).collect();
+        println!("f(x) = {fx:?}");
         // price vector
         let prec = epsilon_squared / (m as f64);
         let theta = find_theta(epsilon_prime, &fx, prec);
         let price = compute_price(&fx, epsilon_prime, theta);
-        println!("++ Starting iteration with price {:?}", price);
+        println!("++ Starting iteration with price {price:?}");
         // solve block problem
-        let max = solve_block_problem_ilp(price, epsilon_prime, &problem_data);
-        println!("Received block problem solution {:?}", max);
+        let y = Selection::init([(
+            solve_block_problem_ilp(&price, epsilon_prime, &problem_data),
+            1.0,
+        )]);
+        println!("Received block problem solution {y:?}");
+        let fy: Vec<f64> = jobs.iter().map(|job| f(job, &y)).collect();
+        println!("f(y) = {fy:?}");
+
+        // compute v
+        let v = compute_v(&price, &fx, &fy);
+        println!("v = {v}");
+        if v < epsilon_prime {
+            break;
+        }
         // update solution = ((1-tau) * solution) + (tau * solution)
-        let tau = compute_step_length();
+        let tau = line_search(&fx, &fy, theta, epsilon_prime, epsilon);
         // let one_minus_tau = 1.0 - tau;
         // for i in 0..jobs.len() {
         // solution[i] = one_minus_tau * solution[i] + tau * solution[i]
         // }
+        x.interpolate(y, tau);
         println!(
             "Updated solution with step length tau={} to be {:?}",
             tau, x
@@ -448,7 +474,7 @@ fn max_min(problem_data: ProblemData) -> HashMap<Configuration, f64> {
 // ->   5
 
 fn solve_block_problem_ilp(
-    q: Vec<f64>,
+    q: &Vec<f64>,
     precision: f64,
     problem_data: &ProblemData,
 ) -> Configuration {
@@ -463,9 +489,9 @@ fn solve_block_problem_ilp(
 
     let variables: Vec<(Rc<Job>, Variable)> = jobs
         .iter()
-        .zip(q.to_vec())
-        .filter(|(_, q)| *q > 0.0)
-        .map(|(job, q)| {
+        .zip(q.iter())
+        .filter(|(_, &q)| q > 0.0)
+        .map(|(job, &q)| {
             let job = Rc::clone(job);
             let c = ConfigurationCandidate {
                 p: job.processing_time,
@@ -529,8 +555,51 @@ fn compute_price(fx: &Vec<f64>, t: f64, theta: f64) -> Vec<f64> {
     fx.iter().map(|x| r * theta / (*x - theta)).collect()
 }
 
-fn compute_step_length() -> f64 {
-    0.0
+fn compute_v(p: &Vec<f64>, fx: &Vec<f64>, fy: &Vec<f64>) -> f64 {
+    let a = vector_multiply(p, fy);
+    let b = vector_multiply(p, fx);
+    (a - b) / (a + b)
+}
+
+fn vector_multiply(a: &Vec<f64>, b: &Vec<f64>) -> f64 {
+    a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
+}
+
+fn line_search(fx: &Vec<f64>, fy: &Vec<f64>, theta: f64, t: f64, epsilon: f64) -> f64 {
+    let mut up = 1.0;
+    let mut low = 0.0;
+
+    // perform a binary search
+    while low < (1.0 - epsilon) * up {
+        let act = (up + low) / 2.0;
+
+        // test if the potential function is still defined
+        let defined = fx
+            .iter()
+            .zip(fy.iter())
+            .all(|(&x, &y)| x + act * (y - x) > theta);
+
+        if !defined {
+            up = act;
+        } else {
+            let val = derivative_pot(act, fx, fy, t, theta);
+            if val > 0.0 {
+                low = act;
+            } else {
+                up = act;
+            }
+        }
+    }
+    (low + up) / 2.0
+}
+
+fn derivative_pot(tau: f64, fx: &Vec<f64>, fy: &Vec<f64>, t: f64, theta: f64) -> f64 {
+    let res: f64 = fx
+        .iter()
+        .zip(fy.iter())
+        .map(|(&x, &y)| (y - x) / (x + tau * (y - x) - theta))
+        .sum();
+    res * t / fx.len() as f64
 }
 
 #[derive(Debug)]
