@@ -382,11 +382,14 @@ impl Selection {
     }
 
     fn interpolate(self: &mut Self, s: Selection, tau: f64) {
-        self.0.values_mut().for_each(|v| *v *= 1.0 - tau);
+        self.scale(1.0 - tau);
         s.0.into_iter().for_each(|(c, v)| {
             let old = self.0.get(&c).unwrap_or(&0.0);
             self.0.insert(c, v * tau + old);
         });
+    }
+    fn scale(self: &mut Self, factor: f64) {
+        self.0.values_mut().for_each(|v| *v *= factor);
     }
 }
 
@@ -445,6 +448,7 @@ fn max_min(problem_data: ProblemData) -> Selection {
         let v = compute_v(&price, &fx, &fy);
         println!("v = {v}");
         if v < epsilon_prime {
+            x.scale(1.0 / fx.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap());
             break;
         }
         // update solution = ((1-tau) * solution) + (tau * solution)
