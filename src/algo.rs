@@ -394,9 +394,7 @@ impl Selection {
 }
 
 fn f(j: &Rc<Job>, x: &Selection) -> f64 {
-    x.0.iter()
-        .map(|(c, x_c)| c.job_count(j) as f64 * x_c / j.processing_time)
-        .sum()
+    x.0.iter().map(|(c, x_c)| c.job_count(j) as f64 * x_c).sum()
 }
 
 fn unit(i: usize, m: usize) -> Vec<f64> {
@@ -448,12 +446,12 @@ fn max_min(problem_data: ProblemData) -> Selection {
         let v = compute_v(&price, &fx, &fy);
         println!("v = {v}");
         if v < epsilon_prime {
-            x.scale(
-                1.0 / fx
-                    .iter()
-                    .min_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
-                    .unwrap_or(&1.0),
-            );
+            let λ_hat = fx
+                .iter()
+                .min_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
+                .unwrap_or(&1.0);
+            println!("λ^ = {}", λ_hat);
+            x.scale(1.0 / λ_hat);
             break;
         }
         // update solution = ((1-tau) * solution) + (tau * solution)
@@ -467,7 +465,6 @@ fn max_min(problem_data: ProblemData) -> Selection {
             "Updated solution with step length tau={} to be {:?}",
             tau, x
         );
-        break;
     }
     println!("Max-min solved with {:?}", x);
     x
