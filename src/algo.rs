@@ -325,55 +325,6 @@ impl Hash for Configuration {
     }
 }
 
-// fn enumerate_all_configurations<'a>(
-//     problem: &'a ProblemData,
-// ) -> Box<dyn Iterator<Item = Configuration> + 'a> {
-//     // get empty config
-//     let config = Configuration::empty();
-//     // make recursive call
-//     search_configurations(config, problem, 0)
-// }
-
-// fn search_configurations<'a>(
-//     config: Configuration,
-//     problem: &'a ProblemData,
-//     skip: usize,
-// ) -> Box<dyn Iterator<Item = Configuration> + 'a> {
-//     let iterator = problem
-//         .jobs
-//         .iter()
-//         .skip(skip)
-//         .filter_map(move |job| {
-//             if config.can_add(job, problem) {
-//                 Some(Configuration::from(&config, job))
-//             } else {
-//                 None
-//             }
-//         })
-//         .enumerate()
-//         .flat_map(move |(i, c)| once(c.clone()).chain(search_configurations(c, problem, skip + i)));
-//     Box::new(iterator) as Box<dyn Iterator<Item = Configuration> + 'a>
-// }
-
-// fn index_configurations(
-//     configurations: Vec<Rc<Configuration>>,
-// ) -> HashMap<i32, Vec<Rc<Configuration>>> {
-//     let mut index = HashMap::new();
-//     for config in configurations.into_iter() {
-//         for &job_id in config.jobs.keys() {
-//             match index.get_mut(&job_id) {
-//                 None => {
-//                     index.insert(job_id, vec![Rc::clone(&config)]);
-//                 }
-//                 Some(vec) => {
-//                     vec.push(Rc::clone(&config));
-//                 }
-//             }
-//         }
-//     }
-//     index
-// }
-
 #[derive(Debug)]
 struct Selection(HashMap<Configuration, f64>);
 impl Selection {
@@ -562,12 +513,12 @@ fn compute_price(fx: &Vec<f64>, t: f64, theta: f64) -> Vec<f64> {
 }
 
 fn compute_v(p: &Vec<f64>, fx: &Vec<f64>, fy: &Vec<f64>) -> f64 {
-    let a = vector_multiply(p, fy);
-    let b = vector_multiply(p, fx);
+    let a = scalar_product(p, fy);
+    let b = scalar_product(p, fx);
     (a - b) / (a + b)
 }
 
-fn vector_multiply(a: &Vec<f64>, b: &Vec<f64>) -> f64 {
+fn scalar_product(a: &Vec<f64>, b: &Vec<f64>) -> f64 {
     a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
 }
 
@@ -657,3 +608,52 @@ impl Ilp {
         model.solve().expect("no ILP solution")
     }
 }
+
+// fn enumerate_all_configurations<'a>(
+//     problem: &'a ProblemData,
+// ) -> Box<dyn Iterator<Item = Configuration> + 'a> {
+//     // get empty config
+//     let config = Configuration::empty();
+//     // make recursive call
+//     search_configurations(config, problem, 0)
+// }
+
+// fn search_configurations<'a>(
+//     config: Configuration,
+//     problem: &'a ProblemData,
+//     skip: usize,
+// ) -> Box<dyn Iterator<Item = Configuration> + 'a> {
+//     let iterator = problem
+//         .jobs
+//         .iter()
+//         .skip(skip)
+//         .filter_map(move |job| {
+//             if config.can_add(job, problem) {
+//                 Some(Configuration::from(&config, job))
+//             } else {
+//                 None
+//             }
+//         })
+//         .enumerate()
+//         .flat_map(move |(i, c)| once(c.clone()).chain(search_configurations(c, problem, skip + i)));
+//     Box::new(iterator) as Box<dyn Iterator<Item = Configuration> + 'a>
+// }
+
+// fn index_configurations(
+//     configurations: Vec<Rc<Configuration>>,
+// ) -> HashMap<i32, Vec<Rc<Configuration>>> {
+//     let mut index = HashMap::new();
+//     for config in configurations.into_iter() {
+//         for &job_id in config.jobs.keys() {
+//             match index.get_mut(&job_id) {
+//                 None => {
+//                     index.insert(job_id, vec![Rc::clone(&config)]);
+//                 }
+//                 Some(vec) => {
+//                     vec.push(Rc::clone(&config));
+//                 }
+//             }
+//         }
+//     }
+//     index
+// }
