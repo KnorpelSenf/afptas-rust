@@ -345,7 +345,7 @@ impl Selection {
 }
 
 fn f(j: &Rc<Job>, x: &Selection) -> f64 {
-    x.0.iter().map(|(c, x_c)| c.job_count(j) as f64 * x_c).sum()
+    x.0.iter().map(|(c, x_c)| c.job_count(j) as f64 * x_c).sum::<f64>() / j.processing_time
 }
 
 fn unit(i: usize, m: usize) -> Vec<f64> {
