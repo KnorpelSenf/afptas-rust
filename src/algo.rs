@@ -328,6 +328,11 @@ impl Hash for Configuration {
 #[derive(Debug)]
 struct Selection(HashMap<Configuration, f64>);
 impl Selection {
+    fn single(config: Configuration) -> Self {
+        let mut h = HashMap::new();
+        h.insert(config, 1.0);
+        Selection(h)
+    }
     fn init(iter: impl IntoIterator<Item = (Configuration, f64)>) -> Self {
         Selection(HashMap::from_iter(iter))
     }
@@ -371,7 +376,6 @@ fn max_min(problem_data: ProblemData) -> Selection {
         ..
     } = problem_data;
     // compute initial solution;
-    let _rho = epsilon_prime / (1.0 + epsilon_prime);
     println!("Computing initial solution");
     let m = jobs.len();
     let mut x = Selection::init((0..m).map(|i| {
@@ -392,10 +396,8 @@ fn max_min(problem_data: ProblemData) -> Selection {
         let price = compute_price(&fx, epsilon_prime, theta);
         println!("++ Starting iteration with price {price:?}");
         // solve block problem
-        let y = Selection::init([(
-            solve_block_problem_ilp(&price, epsilon_prime, &problem_data),
-            1.0,
-        )]);
+        let config = solve_block_problem_ilp(&price, epsilon_prime, &problem_data);
+        let y = Selection::single(config);
         println!("Received block problem solution {y:?}");
         let fy: Vec<f64> = jobs.iter().map(|job| f(job, &y)).collect();
         println!("f(y) = {fy:?}");
