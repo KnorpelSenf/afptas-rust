@@ -333,6 +333,10 @@ impl Selection {
     }
 
     fn interpolate(self: &mut Self, s: Selection, tau: f64) {
+        assert!(
+            s.0.len() == 1,
+            "Newly chosen selection must contain exactly one configuration"
+        );
         self.scale(1.0 - tau);
         s.0.into_iter().for_each(|(c, v)| {
             let old = self.0.get(&c).unwrap_or(&0.0);
@@ -345,7 +349,10 @@ impl Selection {
 }
 
 fn f(j: &Rc<Job>, x: &Selection) -> f64 {
-    x.0.iter().map(|(c, x_c)| c.job_count(j) as f64 * x_c).sum::<f64>() / j.processing_time
+    x.0.iter()
+        .map(|(c, x_c)| c.job_count(j) as f64 * x_c)
+        .sum::<f64>()
+        / j.processing_time
 }
 
 fn unit(i: usize, m: usize) -> Vec<f64> {
