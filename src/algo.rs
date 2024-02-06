@@ -153,7 +153,9 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
         &problem_data,
     );
 
-    let _ = max_min(problem_data);
+    let x = max_min(&problem_data);
+    let x_tilde = generalize(&problem_data, x);
+    println!("{:#?}", x_tilde);
 
     Schedule {
         mapping: Box::from(vec![]),
@@ -283,6 +285,16 @@ impl Configuration {
     fn job_count(&self, job: &Rc<Job>) -> i32 {
         *self.jobs.get(job).unwrap_or(&0)
     }
+
+    fn reduce_to_wide_jobs(&self, problem: &ProblemData) -> Configuration {
+        Configuration::new(
+            self.jobs
+                .iter()
+                .filter(|(job, _)| problem.is_wide(job))
+                .map(|(job, count)| (job.clone(), *count))
+                .collect(),
+        )
+    }
     // fn can_add(&self, job: &Job, problem: &ProblemData) -> bool {
     //     self.get(job).unwrap_or(0) + 1
     //         <= if problem.is_wide(job) {
@@ -366,7 +378,7 @@ fn unit(i: usize, m: usize) -> Vec<f64> {
     temp_vec
 }
 
-fn max_min(problem_data: ProblemData) -> Selection {
+fn max_min(problem_data: &ProblemData) -> Selection {
     println!("Solving max-min");
     let ProblemData {
         epsilon,
@@ -392,11 +404,11 @@ fn max_min(problem_data: ProblemData) -> Selection {
         println!("f(x) = {fx:?}");
         // price vector
         let prec = epsilon_squared / (m as f64);
-        let theta = find_theta(epsilon_prime, &fx, prec);
-        let price = compute_price(&fx, epsilon_prime, theta);
+        let theta = find_theta(*epsilon_prime, &fx, prec);
+        let price = compute_price(&fx, *epsilon_prime, theta);
         println!("++ Starting iteration with price {price:?}");
         // solve block problem
-        let config = solve_block_problem_ilp(&price, epsilon_prime, &problem_data);
+        let config = solve_block_problem_ilp(&price, *epsilon_prime, &problem_data);
         let y = Selection::single(config);
         println!("Received block problem solution {y:?}");
         let fy: Vec<f64> = jobs.iter().map(|job| f(job, &y)).collect();
@@ -405,7 +417,7 @@ fn max_min(problem_data: ProblemData) -> Selection {
         // compute v
         let v = compute_v(&price, &fx, &fy);
         println!("v = {v}");
-        if v < epsilon_prime {
+        if v < *epsilon_prime {
             let λ_hat = fx
                 .iter()
                 .min_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
@@ -415,7 +427,7 @@ fn max_min(problem_data: ProblemData) -> Selection {
             break;
         }
         // update solution = ((1-tau) * solution) + (tau * solution)
-        let tau = line_search(&fx, &fy, theta, epsilon_prime, epsilon);
+        let tau = line_search(&fx, &fy, theta, *epsilon_prime, *epsilon);
         // let one_minus_tau = 1.0 - tau;
         // for i in 0..jobs.len() {
         // solution[i] = one_minus_tau * solution[i] + tau * solution[i]
@@ -429,15 +441,6 @@ fn max_min(problem_data: ProblemData) -> Selection {
     println!("Max-min solved with {:?}", x);
     x
 }
-
-// job: 0 1 2
-// vec: 1 0 5
-// -> config: (0: 1), (2, 5)
-
-// con: 0 1 2
-// x  : 1 0 5
-// x_c mit c=2 => 5
-// ->   5
 
 fn solve_block_problem_ilp(
     q: &Vec<f64>,
@@ -618,51 +621,80 @@ impl Ilp {
     }
 }
 
-// fn enumerate_all_configurations<'a>(
-//     problem: &'a ProblemData,
-// ) -> Box<dyn Iterator<Item = Configuration> + 'a> {
-//     // get empty config
-//     let config = Configuration::empty();
-//     // make recursive call
-//     search_configurations(config, problem, 0)
-// }
+fn generalize(problem: &ProblemData, x: Selection) -> GeneralizedSelection {
+    GeneralizedSelection::from_iter(
+        x.0.iter()
+            .map(|(c, x_c)| (c.reduce_to_wide_jobs(problem), x_c))
+            .fold(HashMap::new(), |mut acc, (c, x_c)| {
+                let gen = GeneralizedConfiguration::from_configuration(problem, c);
+                let existing = acc.get(&gen).unwrap_or(&0.0);
+                acc.insert(gen, x_c + existing);
+                acc
+            }),
+    )
+}
 
-// fn search_configurations<'a>(
-//     config: Configuration,
-//     problem: &'a ProblemData,
-//     skip: usize,
-// ) -> Box<dyn Iterator<Item = Configuration> + 'a> {
-//     let iterator = problem
-//         .jobs
-//         .iter()
-//         .skip(skip)
-//         .filter_map(move |job| {
-//             if config.can_add(job, problem) {
-//                 Some(Configuration::from(&config, job))
-//             } else {
-//                 None
-//             }
-//         })
-//         .enumerate()
-//         .flat_map(move |(i, c)| once(c.clone()).chain(search_configurations(c, problem, skip + i)));
-//     Box::new(iterator) as Box<dyn Iterator<Item = Configuration> + 'a>
-// }
-
-// fn index_configurations(
-//     configurations: Vec<Rc<Configuration>>,
-// ) -> HashMap<i32, Vec<Rc<Configuration>>> {
-//     let mut index = HashMap::new();
-//     for config in configurations.into_iter() {
-//         for &job_id in config.jobs.keys() {
-//             match index.get_mut(&job_id) {
-//                 None => {
-//                     index.insert(job_id, vec![Rc::clone(&config)]);
-//                 }
-//                 Some(vec) => {
-//                     vec.push(Rc::clone(&config));
-//                 }
-//             }
-//         }
+#[derive(Debug)]
+struct Window {
+    resource_amount: f64,
+    machine_count: i32,
+}
+impl Window {
+    fn main(problem: &ProblemData, config: &Configuration) -> Self {
+        Window {
+            resource_amount: problem.resource_limit - config.resource_amount,
+            machine_count: problem.machine_count - config.machine_count,
+        }
+    }
+}
+// impl Debug for Window {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         f.write_str("[R=")?;
+//         f.write_str(&self.resource_amount.to_string())?;
+//         f.write_str(",m=")?;
+//         f.write_str(&self.machine_count.to_string())?;
+//         f.write_str("]")?;
+//         Ok(())
 //     }
-//     index
 // }
+
+#[derive(Debug)]
+struct GeneralizedConfiguration {
+    configuration: Configuration,
+    winodw: Window,
+}
+impl GeneralizedConfiguration {
+    fn from_configuration(problem: &ProblemData, configuration: Configuration) -> Self {
+        let main_window = Window::main(problem, &configuration);
+        GeneralizedConfiguration {
+            configuration,
+            winodw: main_window,
+        }
+    }
+}
+impl PartialEq for GeneralizedConfiguration {
+    fn eq(&self, other: &Self) -> bool {
+        self.configuration.eq(&other.configuration)
+    }
+}
+impl Eq for GeneralizedConfiguration {}
+impl Hash for GeneralizedConfiguration {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.configuration.hash(state)
+    }
+}
+// impl Debug for GeneralizedConfiguration {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         f.write_str("GConfig")?;
+//         self.winodw.fmt(f)?;
+//         f.debug_list().entries(&self.configuration.jobs).finish()?;
+//         Ok(())
+//     }
+// }
+#[derive(Debug)]
+struct GeneralizedSelection(HashMap<GeneralizedConfiguration, f64>);
+impl GeneralizedSelection {
+    fn from_iter<T: IntoIterator<Item = (GeneralizedConfiguration, f64)>>(iter: T) -> Self {
+        GeneralizedSelection(HashMap::from_iter(iter))
+    }
+}
