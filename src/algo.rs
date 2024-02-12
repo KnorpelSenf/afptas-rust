@@ -155,7 +155,7 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
 
     let x = max_min(&problem_data);
     let x_tilde = generalize(&problem_data, x);
-    println!("{:#?}", x_tilde);
+    println!("{:?}", x_tilde);
 
     Schedule {
         mapping: Box::from(vec![]),
@@ -648,7 +648,6 @@ fn generalize(problem: &ProblemData, x: Selection) -> GeneralizedSelection {
     )
 }
 
-#[derive(Debug)]
 struct Window {
     resource_amount: f64,
     machine_count: i32,
@@ -661,18 +660,17 @@ impl Window {
         }
     }
 }
-// impl Debug for Window {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         f.write_str("[R=")?;
-//         f.write_str(&self.resource_amount.to_string())?;
-//         f.write_str(",m=")?;
-//         f.write_str(&self.machine_count.to_string())?;
-//         f.write_str("]")?;
-//         Ok(())
-//     }
-// }
+impl Debug for Window {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("[R=")?;
+        f.write_str(&self.resource_amount.to_string())?;
+        f.write_str(",m=")?;
+        f.write_str(&self.machine_count.to_string())?;
+        f.write_str("]")?;
+        Ok(())
+    }
+}
 
-#[derive(Debug)]
 struct GeneralizedConfiguration {
     configuration: Configuration,
     winodw: Window,
@@ -697,14 +695,14 @@ impl Hash for GeneralizedConfiguration {
         self.configuration.hash(state)
     }
 }
-// impl Debug for GeneralizedConfiguration {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         f.write_str("GConfig")?;
-//         self.winodw.fmt(f)?;
-//         f.debug_list().entries(&self.configuration.jobs).finish()?;
-//         Ok(())
-//     }
-// }
+impl Debug for GeneralizedConfiguration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("GConfig")?;
+        self.winodw.fmt(f)?;
+        f.debug_list().entries(&self.configuration.jobs).finish()?;
+        Ok(())
+    }
+}
 #[derive(Debug)]
 struct GeneralizedSelection(HashMap<GeneralizedConfiguration, f64>);
 impl GeneralizedSelection {
