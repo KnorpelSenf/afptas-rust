@@ -2,8 +2,8 @@
 
 ## Setup
 
-1. You need to install Rust | https://www.rust-lang.org/tools/install
-2. You need to install an LP solver by running `sudo apt install coinor-cbc coinor-libcbc-dev` (Linux) or `brew install cbc` (Mac) | https://github.com/rust-or/good_lp#cbc
+1. You need to install Rust | <https://www.rust-lang.org/tools/install>
+2. You need to install an LP solver by running `sudo apt install coinor-cbc coinor-libcbc-dev` (Linux) or `brew install cbc` (Mac) | <https://github.com/rust-or/good_lp#cbc>
 
 This is a pseudo version of the algorithm that reflects our current
 understanding of the problem.
