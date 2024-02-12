@@ -248,10 +248,15 @@ fn linear_grouping(step: f64, jobs: &Vec<Rc<Job>>) -> Vec<Vec<Rc<Job>>> {
 
 #[derive(Clone)]
 struct Configuration {
+    /// job -> index in vector
+    index: HashMap<Rc<Job>, usize>,
     /// job -> how many times it is contained
-    jobs: HashMap<Rc<Job>, i32>,
+    jobs: Vec<(Rc<Job>, i32)>,
+    /// precomputed processing time
     processing_time: f64,
+    /// precomputed resource amount
     resource_amount: f64,
+    /// precomputed machine count
     machine_count: i32,
 }
 impl Debug for Configuration {
@@ -274,16 +279,25 @@ impl Configuration {
                     m + *count,
                 )
             });
+        let index = HashMap::from_iter(
+            jobs.iter()
+                .enumerate()
+                .map(|(i, (job, _))| (Rc::clone(job), i)),
+        );
         Configuration {
+            jobs,
+            index,
             processing_time,
             resource_amount,
             machine_count,
-            jobs: HashMap::from_iter(jobs),
         }
     }
     /// C(j)
     fn job_count(&self, job: &Rc<Job>) -> i32 {
-        *self.jobs.get(job).unwrap_or(&0)
+        match self.index.get(job) {
+            None => 0,
+            Some(i) => self.jobs.get(*i).map_or(0, |pair| pair.1),
+        }
     }
 
     fn reduce_to_wide_jobs(&self, problem: &ProblemData) -> Configuration {
