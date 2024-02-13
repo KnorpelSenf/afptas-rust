@@ -134,6 +134,7 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     let Instance {
         epsilon,
         machine_count,
+        resource_limit,
         ..
     } = instance;
 
@@ -153,9 +154,13 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
         &problem_data,
     );
 
+    let job_len = problem_data.jobs.len();
     let x = max_min(&problem_data);
+    println!("Max-min solved with:");
+    print_selection(job_len, machine_count, &x);
     let (x_tilde, y_tilde) = generalize(&problem_data, x);
-    println!("{:?}", x_tilde);
+    println!("Generalized to:");
+    print_gen_selection(job_len, machine_count, resource_limit, &x_tilde);
     println!("{:?}", y_tilde);
     let _ = reduce_resource_amounts(&problem_data, x_tilde);
 
@@ -454,8 +459,47 @@ fn max_min(problem_data: &ProblemData) -> Selection {
             tau, x
         );
     }
-    println!("Max-min solved with {:?}", x);
     x
+}
+fn print_selection(job_len: usize, m: i32, x: &Selection) {
+    let digits_per_job_id = (job_len - 1).to_string().len();
+    let lcol = 4.max(digits_per_job_id * m as usize);
+    println!("{: >lcol$} | Length", "Jobs");
+    println!("{:->lcol$}---{}", "-", "-".repeat(19));
+    for (c, x_c) in x.0.iter() {
+        let job_ids = c
+            .jobs
+            .iter()
+            .map(|job| format!("{: >digits_per_job_id$}", job.0.id.to_string(),))
+            .collect::<Vec<_>>()
+            .join("");
+        println!("{: >lcol$} | {}", job_ids, x_c);
+    }
+}
+fn print_gen_selection(job_len: usize, m: i32, r: f64, x: &GeneralizedSelection) {
+    let digits_per_job_id = (job_len - 1).to_string().len();
+    let digits_per_machine = m.to_string().len();
+    let digits_per_resource = r.ceil().to_string().len() + 3;
+    let lcol = "Jobs".len().max(digits_per_job_id * m as usize);
+    let mcol = "w=(m,r)"
+        .len()
+        .max(1 + digits_per_machine + ", ".len() + digits_per_resource + 1);
+    println!("{: >lcol$} | {: <mcol$} | Length", "Jobs", "w=(m,r)",);
+    println!("{:->lcol$}---{:-<mcol$}---{}", "-", "-", "-".repeat(19));
+    for (c, x_c) in x.0.iter() {
+        let job_ids = c
+            .configuration
+            .jobs
+            .iter()
+            .map(|job| format!("{: >digits_per_job_id$}", job.0.id.to_string(),))
+            .collect::<Vec<_>>()
+            .join("");
+        let win = format!(
+            "({: >digits_per_machine$}, {: >.2})", // FIXME: account for multi-digit resources in window
+            c.winodw.machine_count, c.winodw.resource_amount
+        );
+        println!("{: >lcol$} | {win} | {}", job_ids, x_c);
+    }
 }
 
 fn solve_block_problem_ilp(
@@ -647,7 +691,6 @@ fn generalize(problem: &ProblemData, x: Selection) -> (GeneralizedSelection, Nar
     let (x_tilde, y_tilde) =
         x.0.iter()
             .map(|(c, x_c)| (c, c.reduce_to_wide_jobs(problem), x_c))
-            .filter(|(_, c_w, _)| c_w.jobs.len() > 0) // (?)
             .fold(
                 (HashMap::new(), HashMap::new()),
                 |(mut acc_x, mut acc_y), (c, c_w, x_c)| {
@@ -764,13 +807,18 @@ fn reduce_resource_amounts(
     problem: &ProblemData,
     x_tilde: GeneralizedSelection,
 ) -> Vec<Vec<Configuration>> {
-    let m = problem.machine_count as usize - 1;
-    println!("m={} and 1/e'={}", m + 1, 1.0 / problem.epsilon_prime);
+    let m = problem.machine_count as usize;
+    println!("m={} and 1/e'={}", m, 1.0 / problem.epsilon_prime);
     // List of K_i sets with pre-computed P_pre(K_i) per set
     let mut k: Vec<(f64, Vec<Configuration>)> = vec![(0.0, vec![]); m];
     let mut p_pre = 0.0;
-    for (c, x_c) in x_tilde.0.into_iter() {
+    for (c, x_c) in x_tilde
+        .0
+        .into_iter()
+        .filter(|(c, _)| c.configuration.machine_count > 0)
+    {
         let i = c.configuration.machine_count as usize - 1;
+        println!("{i} - {:?}", c);
         p_pre += x_c;
         k[i].0 += x_c;
         k[i].1.push(c.configuration);
