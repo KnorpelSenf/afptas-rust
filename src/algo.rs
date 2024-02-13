@@ -155,8 +155,9 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
 
     let x = max_min(&problem_data);
     let (x_tilde, y_tilde) = generalize(&problem_data, x);
-    println!("{:#?}", x_tilde);
-    println!("{:#?}", y_tilde);
+    println!("{:?}", x_tilde);
+    println!("{:?}", y_tilde);
+    let _ = reduce_resource_amounts(&problem_data, x_tilde);
 
     Schedule {
         mapping: Box::from(vec![]),
@@ -275,7 +276,7 @@ impl Configuration {
         let (processing_time, resource_amount, machine_count) =
             jobs.iter().fold((0.0, 0.0, 0), |(p, r, m), (job, count)| {
                 (
-                    p + job.processing_time * *count as f64,
+                    job.processing_time.max(p),
                     r + job.resource_amount * *count as f64,
                     m + *count,
                 )
@@ -646,7 +647,7 @@ fn generalize(problem: &ProblemData, x: Selection) -> (GeneralizedSelection, Nar
     let (x_tilde, y_tilde) =
         x.0.iter()
             .map(|(c, x_c)| (c, c.reduce_to_wide_jobs(problem), x_c))
-            .filter(|(_, c_w, _)| c_w.jobs.len() > 0)
+            .filter(|(_, c_w, _)| c_w.jobs.len() > 0) // (?)
             .fold(
                 (HashMap::new(), HashMap::new()),
                 |(mut acc_x, mut acc_y), (c, c_w, x_c)| {
@@ -674,6 +675,7 @@ fn generalize(problem: &ProblemData, x: Selection) -> (GeneralizedSelection, Nar
 
     (GeneralizedSelection(x_tilde), NarrowJobSelection(y_tilde))
 }
+
 #[derive(Clone)]
 struct Window {
     resource_amount: f64,
@@ -757,3 +759,46 @@ impl Debug for NarrowJobConfiguration {
 }
 #[derive(Debug)]
 struct NarrowJobSelection(HashMap<NarrowJobConfiguration, f64>);
+
+fn reduce_resource_amounts(
+    problem: &ProblemData,
+    x_tilde: GeneralizedSelection,
+) -> Vec<Vec<Configuration>> {
+    let m = problem.machine_count as usize - 1;
+    println!("m={} and 1/e'={}", m + 1, 1.0 / problem.epsilon_prime);
+    // List of K_i sets with pre-computed P_pre(K_i) per set
+    let mut k: Vec<(f64, Vec<Configuration>)> = vec![(0.0, vec![]); m];
+    let mut p_pre = 0.0;
+    for (c, x_c) in x_tilde.0.into_iter() {
+        let i = c.configuration.machine_count as usize - 1;
+        p_pre += x_c;
+        k[i].0 += x_c;
+        k[i].1.push(c.configuration);
+    }
+    let p_pre = p_pre; // end mut
+    println!("P_pre={p_pre}");
+    for (_, k_i) in k.iter_mut() {
+        k_i.sort_by(|c0, c1| {
+            c0.resource_amount
+                .partial_cmp(&c1.resource_amount)
+                .expect(&format!(
+                    "could not comare resource amounts {} and {}",
+                    c0.resource_amount, c1.resource_amount
+                ))
+        });
+    }
+    let window_size = problem.epsilon_prime_squared * p_pre;
+    println!("Window size is {window_size}");
+    for (i, (p_pre_k_i, k_i)) in k.iter().enumerate() {
+        println!(
+            "K_{}={:?} from {}/{} is {}",
+            i + 1,
+            k_i,
+            p_pre_k_i,
+            window_size,
+            (p_pre_k_i / window_size).ceil()
+        );
+    }
+
+    k.into_iter().map(|(_, c)| c).collect()
+}
