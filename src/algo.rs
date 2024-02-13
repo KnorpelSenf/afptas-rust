@@ -650,12 +650,12 @@ fn generalize(problem: &ProblemData, x: Selection) -> (GeneralizedSelection, Nar
             .fold(
                 (HashMap::new(), HashMap::new()),
                 |(mut acc_x, mut acc_y), (c, c_w, x_c)| {
-                    let win = Window::main(problem, &c_w);
+                    let win = Rc::new(Window::main(problem, &c_w));
 
                     for narrow_job in narrow_jobs.iter() {
                         let nconf = NarrowJobConfiguration {
                             narrow_job: Rc::clone(&narrow_job),
-                            window: win.clone(),
+                            window: Rc::clone(&win),
                         };
                         let existing = acc_y.get(&nconf).unwrap_or(&0.0);
                         acc_y.insert(nconf, c.job_count(&narrow_job) as f64 * x_c + existing);
@@ -718,7 +718,7 @@ impl Debug for Window {
 
 struct GeneralizedConfiguration {
     configuration: Configuration,
-    winodw: Window,
+    winodw: Rc<Window>,
 }
 impl PartialEq for GeneralizedConfiguration {
     fn eq(&self, other: &Self) -> bool {
@@ -745,7 +745,7 @@ struct GeneralizedSelection(HashMap<GeneralizedConfiguration, f64>);
 #[derive(PartialEq, Eq, Hash)]
 struct NarrowJobConfiguration {
     narrow_job: Rc<Job>,
-    window: Window,
+    window: Rc<Window>,
 }
 impl Debug for NarrowJobConfiguration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
