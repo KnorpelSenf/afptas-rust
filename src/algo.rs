@@ -154,8 +154,9 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     );
 
     let x = max_min(&problem_data);
-    let x_tilde = generalize(&problem_data, x);
-    println!("{:?}", x_tilde);
+    let (x_tilde, y_tilde) = generalize(&problem_data, x);
+    println!("{:#?}", x_tilde);
+    println!("{:#?}", y_tilde);
 
     Schedule {
         mapping: Box::from(vec![]),
@@ -635,29 +636,73 @@ impl Ilp {
     }
 }
 
-fn generalize(problem: &ProblemData, x: Selection) -> GeneralizedSelection {
-    GeneralizedSelection::from_iter(
+fn generalize(problem: &ProblemData, x: Selection) -> (GeneralizedSelection, NarrowJobSelection) {
+    let narrow_jobs: Vec<Rc<Job>> = problem
+        .jobs
+        .iter()
+        .filter(|job| !problem.is_wide(job))
+        .map(|job| Rc::clone(job))
+        .collect();
+    let (x_tilde, y_tilde) =
         x.0.iter()
-            .map(|(c, x_c)| (c.reduce_to_wide_jobs(problem), x_c))
-            .fold(HashMap::new(), |mut acc, (c, x_c)| {
-                let gen = GeneralizedConfiguration::from_configuration(problem, c);
-                let existing = acc.get(&gen).unwrap_or(&0.0);
-                acc.insert(gen, x_c + existing);
-                acc
-            }),
-    )
-}
+            .map(|(c, x_c)| (c, c.reduce_to_wide_jobs(problem), x_c))
+            .filter(|(_, c_w, _)| c_w.jobs.len() > 0)
+            .fold(
+                (HashMap::new(), HashMap::new()),
+                |(mut acc_x, mut acc_y), (c, c_w, x_c)| {
+                    let win = Window::main(problem, &c_w);
 
+                    for narrow_job in narrow_jobs.iter() {
+                        let nconf = NarrowJobConfiguration {
+                            narrow_job: Rc::clone(&narrow_job),
+                            window: win.clone(),
+                        };
+                        let existing = acc_y.get(&nconf).unwrap_or(&0.0);
+                        acc_y.insert(nconf, c.job_count(&narrow_job) as f64 * x_c + existing);
+                    }
+
+                    let gen = GeneralizedConfiguration {
+                        configuration: c_w,
+                        winodw: win,
+                    };
+                    let existing = acc_x.get(&gen).unwrap_or(&0.0);
+                    acc_x.insert(gen, x_c + existing);
+
+                    (acc_x, acc_y)
+                },
+            );
+
+    (GeneralizedSelection(x_tilde), NarrowJobSelection(y_tilde))
+}
+#[derive(Clone)]
 struct Window {
     resource_amount: f64,
     machine_count: i32,
 }
 impl Window {
     fn main(problem: &ProblemData, config: &Configuration) -> Self {
+        let machine_count = problem.machine_count - config.machine_count;
+        let resource_amount = if machine_count == 0 {
+            0.0
+        } else {
+            problem.resource_limit - config.resource_amount
+        };
         Window {
-            resource_amount: problem.resource_limit - config.resource_amount,
-            machine_count: problem.machine_count - config.machine_count,
+            resource_amount,
+            machine_count,
         }
+    }
+}
+impl PartialEq for Window {
+    fn eq(&self, other: &Self) -> bool {
+        self.resource_amount.eq(&other.resource_amount) && self.machine_count == other.machine_count
+    }
+}
+impl Eq for Window {}
+impl Hash for Window {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.resource_amount.to_bits().hash(state);
+        self.machine_count.hash(state);
     }
 }
 impl Debug for Window {
@@ -674,15 +719,6 @@ impl Debug for Window {
 struct GeneralizedConfiguration {
     configuration: Configuration,
     winodw: Window,
-}
-impl GeneralizedConfiguration {
-    fn from_configuration(problem: &ProblemData, configuration: Configuration) -> Self {
-        let main_window = Window::main(problem, &configuration);
-        GeneralizedConfiguration {
-            configuration,
-            winodw: main_window,
-        }
-    }
 }
 impl PartialEq for GeneralizedConfiguration {
     fn eq(&self, other: &Self) -> bool {
@@ -705,8 +741,19 @@ impl Debug for GeneralizedConfiguration {
 }
 #[derive(Debug)]
 struct GeneralizedSelection(HashMap<GeneralizedConfiguration, f64>);
-impl GeneralizedSelection {
-    fn from_iter<T: IntoIterator<Item = (GeneralizedConfiguration, f64)>>(iter: T) -> Self {
-        GeneralizedSelection(HashMap::from_iter(iter))
+
+#[derive(PartialEq, Eq, Hash)]
+struct NarrowJobConfiguration {
+    narrow_job: Rc<Job>,
+    window: Window,
+}
+impl Debug for NarrowJobConfiguration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("NConfig")?;
+        self.window.fmt(f)?;
+        self.narrow_job.fmt(f)?;
+        Ok(())
     }
 }
+#[derive(Debug)]
+struct NarrowJobSelection(HashMap<NarrowJobConfiguration, f64>);
