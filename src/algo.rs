@@ -479,26 +479,28 @@ fn print_selection(job_len: usize, m: i32, x: &Selection) {
 fn print_gen_selection(job_len: usize, m: i32, r: f64, x: &GeneralizedSelection) {
     let digits_per_job_id = (job_len - 1).to_string().len();
     let digits_per_machine = m.to_string().len();
-    let digits_per_resource = r.ceil().to_string().len() + 3;
+    let resource_precision = 2;
+    let digits_per_resource = r.ceil().to_string().len() + 1 + resource_precision;
     let lcol = "Jobs".len().max(digits_per_job_id * m as usize);
     let mcol = "w=(m,r)"
         .len()
         .max(1 + digits_per_machine + ", ".len() + digits_per_resource + 1);
-    println!("{: >lcol$} | {: <mcol$} | Length", "Jobs", "w=(m,r)",);
+    println!("{:>lcol$} | {:<mcol$} | Length", "Jobs", "w=(m,r)",);
     println!("{:->lcol$}---{:-<mcol$}---{}", "-", "-", "-".repeat(19));
     for (c, x_c) in x.0.iter() {
         let job_ids = c
             .configuration
             .jobs
             .iter()
-            .map(|job| format!("{: >digits_per_job_id$}", job.0.id.to_string(),))
+            .map(|job| format!("{:>digits_per_job_id$}", job.0.id.to_string(),))
             .collect::<Vec<_>>()
             .join("");
         let win = format!(
-            "({: >digits_per_machine$}, {: >.2})", // FIXME: account for multi-digit resources in window
-            c.winodw.machine_count, c.winodw.resource_amount
+            "({:>digits_per_machine$}, {:>digits_per_resource$})",
+            c.winodw.machine_count,
+            format!("{:.resource_precision$}", c.winodw.resource_amount)
         );
-        println!("{: >lcol$} | {win} | {}", job_ids, x_c);
+        println!("{:>lcol$} | {win} | {}", job_ids, x_c);
     }
 }
 
