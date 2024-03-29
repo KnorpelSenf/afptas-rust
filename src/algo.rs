@@ -161,7 +161,6 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     let (x_tilde, y_tilde) = generalize(&problem_data, x);
     println!("Generalized to:");
     print_gen_selection(job_len, machine_count, resource_limit, &x_tilde);
-    println!("{:?}", y_tilde);
     let _ = reduce_resource_amounts(&problem_data, x_tilde);
 
     Schedule {
@@ -470,7 +469,9 @@ fn print_selection(job_len: usize, m: i32, x: &Selection) {
         let job_ids = c
             .jobs
             .iter()
-            .map(|job| format!("{: >digits_per_job_id$}", job.0.id.to_string(),))
+            .map(|job| {
+                format!("{: >digits_per_job_id$}", job.0.id.to_string()).repeat(job.1 as usize)
+            })
             .collect::<Vec<_>>()
             .join("");
         println!("{: >lcol$} | {}", job_ids, x_c);
@@ -492,7 +493,9 @@ fn print_gen_selection(job_len: usize, m: i32, r: f64, x: &GeneralizedSelection)
             .configuration
             .jobs
             .iter()
-            .map(|job| format!("{:>digits_per_job_id$}", job.0.id.to_string(),))
+            .map(|job| {
+                format!("{:>digits_per_job_id$}", job.0.id.to_string()).repeat(job.1 as usize)
+            })
             .collect::<Vec<_>>()
             .join("");
         let win = format!(
@@ -809,8 +812,9 @@ fn reduce_resource_amounts(
     problem: &ProblemData,
     x_tilde: GeneralizedSelection,
 ) -> Vec<Vec<Configuration>> {
+    println!("Reducing resource amounts");
     let m = problem.machine_count as usize;
-    println!("m={} and 1/e'={}", m, 1.0 / problem.epsilon_prime);
+    println!("m={} and 1/e'={}", m, problem.one_over_epsilon_prime);
     // List of K_i sets with pre-computed P_pre(K_i) per set
     let mut k: Vec<(f64, Vec<Configuration>)> = vec![(0.0, vec![]); m];
     let mut p_pre = 0.0;
@@ -819,11 +823,12 @@ fn reduce_resource_amounts(
         .into_iter()
         .filter(|(c, _)| c.configuration.machine_count > 0)
     {
-        let i = c.configuration.machine_count as usize - 1;
+        let i = c.configuration.machine_count as usize;
         println!("{i} machines used in config {:?}", c);
+        let group = i - 1;
         p_pre += x_c;
-        k[i].0 += x_c;
-        k[i].1.push(c.configuration);
+        k[group].0 += x_c;
+        k[group].1.push(c.configuration);
     }
     let p_pre = p_pre; // end mut
     println!("P_pre={p_pre}");
