@@ -820,7 +820,7 @@ fn reduce_resource_amounts(
         .filter(|(c, _)| c.configuration.machine_count > 0)
     {
         let i = c.configuration.machine_count as usize - 1;
-        println!("{i} - {:?}", c);
+        println!("{i} machines used in config {:?}", c);
         p_pre += x_c;
         k[i].0 += x_c;
         k[i].1.push(c.configuration);
