@@ -42,5 +42,5 @@ Progress:
 Run it via
 
 ```sh
-cargo run -- -e 0.9 -m 10 -r 5 -j jobs.csv
+cargo run -- -e 0.5 -m 3 -r 11 -j jobs.csv
 ```
