@@ -1,5 +1,6 @@
 {
   "rust-analyzer.procMacro.enable": true,
   "java.compile.nullAnalysis.mode": "automatic",
-  "editor.defaultFormatter": "rust-lang.rust-analyzer"
+  "editor.defaultFormatter": "rust-lang.rust-analyzer",
+  "rust-analyzer.linkedProjects": ["./Cargo.toml"]
 }
