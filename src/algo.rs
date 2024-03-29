@@ -3,7 +3,7 @@ use good_lp::{
     SolverModel, Variable,
 };
 use std::{
-    cmp::Ordering,
+    cmp::{max, min, Ordering},
     collections::HashMap,
     fmt::Debug,
     hash::{Hash, Hasher},
@@ -462,7 +462,7 @@ fn max_min(problem_data: &ProblemData) -> Selection {
 }
 fn print_selection(job_len: usize, m: i32, x: &Selection) {
     let digits_per_job_id = (job_len - 1).to_string().len();
-    let lcol = 4.max(digits_per_job_id * m as usize);
+    let lcol = max(4, digits_per_job_id * m as usize);
     println!("{: >lcol$} | Length", "Jobs");
     println!("{:->lcol$}---{}", "-", "-".repeat(19));
     for (c, x_c) in x.0.iter() {
@@ -482,10 +482,11 @@ fn print_gen_selection(job_len: usize, m: i32, r: f64, x: &GeneralizedSelection)
     let digits_per_machine = m.to_string().len();
     let resource_precision = 2;
     let digits_per_resource = r.ceil().to_string().len() + 1 + resource_precision;
-    let lcol = "Jobs".len().max(digits_per_job_id * m as usize);
-    let mcol = "w=(m,r)"
-        .len()
-        .max(1 + digits_per_machine + ", ".len() + digits_per_resource + 1);
+    let lcol = max("Jobs".len(), digits_per_job_id * m as usize);
+    let mcol = max(
+        "w=(m,r)".len(),
+        1 + digits_per_machine + ", ".len() + digits_per_resource + 1,
+    );
     println!("{:>lcol$} | {:<mcol$} | Length", "Jobs", "w=(m,r)",);
     println!("{:->lcol$}---{:-<mcol$}---{}", "-", "-", "-".repeat(19));
     for (c, x_c) in x.0.iter() {
@@ -815,8 +816,9 @@ fn reduce_resource_amounts(
     println!("Reducing resource amounts");
     let m = problem.machine_count as usize;
     println!("m={} and 1/e'={}", m, problem.one_over_epsilon_prime);
+    let k_len = min(m, problem.one_over_epsilon_prime as usize);
     // List of K_i sets with pre-computed P_pre(K_i) per set
-    let mut k: Vec<(f64, Vec<Configuration>)> = vec![(0.0, vec![]); m];
+    let mut k: Vec<(f64, Vec<Configuration>)> = vec![(0.0, vec![]); k_len];
     let mut p_pre = 0.0;
     for (c, x_c) in x_tilde
         .0
