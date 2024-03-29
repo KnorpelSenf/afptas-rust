@@ -785,7 +785,10 @@ impl Hash for GeneralizedConfiguration {
 }
 impl Debug for GeneralizedConfiguration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("GConfig")?;
+        f.write_fmt(format_args!(
+            "GConfig[{:.3}]",
+            self.configuration.processing_time
+        ))?;
         self.window.fmt(f)?;
         f.debug_list().entries(&self.configuration.jobs).finish()?;
         Ok(())
