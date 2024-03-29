@@ -31,13 +31,14 @@ pub fn parse() -> Instance {
     let args = Args::parse();
     println!("Parsing input data");
 
-    let job_file: Vec<String> = if args.job_file == "-" {
+    let is_stdin = args.job_file == "-";
+    let job_file: Vec<String> = if is_stdin {
         stdin()
             .lines()
             .filter_map(|line| line.ok())
             .collect::<Vec<String>>()
     } else {
-        BufReader::new(File::open(args.job_file).expect("Could not open job file"))
+        BufReader::new(File::open(args.job_file.clone()).expect("Could not open job file"))
             .lines()
             .filter_map(|line| line.ok())
             .collect::<Vec<String>>()
@@ -58,6 +59,18 @@ pub fn parse() -> Instance {
                 .expect(format!("missing col 1 in row {}", index).as_str())
                 .parse::<f64>()
                 .expect(format!("cannot parse col 1 as int in row {}", index).as_str());
+            if r > args.resource_limit {
+                let line = index + 1; // column header offset
+                let pos = if is_stdin {
+                    format!("on input line {}", line)
+                } else {
+                    format!("at {}:{}", args.job_file, line)
+                };
+                panic!(
+                    "No possible solution, job {} needs {} resources but the resource limit is {}",
+                    pos, r, args.resource_limit
+                );
+            }
             InstanceJob {
                 processing_time: p,
                 resource_amount: r,
