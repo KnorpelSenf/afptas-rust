@@ -3,10 +3,12 @@ use good_lp::{
     SolverModel, Variable,
 };
 use std::{
+    borrow::Borrow,
     cmp::{max, min, Ordering},
     collections::HashMap,
     fmt::Debug,
     hash::{Hash, Hasher},
+    intrinsics::exp2f64,
     rc::Rc,
 };
 
@@ -161,6 +163,11 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     let (x_tilde, y_tilde) = generalize(&problem_data, x);
     println!("Generalized to:");
     print_gen_selection(job_len, machine_count, resource_limit, &x_tilde);
+    println!("-----");
+    for x in x_tilde.0.iter() {
+        println!("{:?}", x);
+    }
+    println!("-----");
     let _k = reduce_resource_amounts(&problem_data, x_tilde);
 
     Schedule {
@@ -785,17 +792,23 @@ impl Hash for GeneralizedConfiguration {
 }
 impl Debug for GeneralizedConfiguration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!(
-            "GConfig[{:.3}]",
-            self.configuration.processing_time
-        ))?;
+        f.write_str(format!("GConfig[{:.3}]", self.configuration.processing_time).as_str())?;
         self.window.fmt(f)?;
         f.debug_list().entries(&self.configuration.jobs).finish()?;
         Ok(())
     }
 }
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct GeneralizedSelection(HashMap<GeneralizedConfiguration, f64>);
+impl GeneralizedSelection {
+    fn new() -> Self {
+        GeneralizedSelection(HashMap::new())
+    }
+    fn add(&mut self, config: GeneralizedConfiguration, x_c: f64) {
+        let existing = self.0.get(&config).unwrap_or(&0.0);
+        self.0.insert(config, x_c + existing);
+    }
+}
 
 #[derive(PartialEq, Eq, Hash)]
 struct NarrowJobConfiguration {
@@ -816,13 +829,13 @@ struct NarrowJobSelection(HashMap<NarrowJobConfiguration, f64>);
 fn reduce_resource_amounts(
     problem: &ProblemData,
     x_tilde: GeneralizedSelection,
-) -> Vec<Vec<GeneralizedConfiguration>> {
+) -> GeneralizedSelection {
     println!("Reducing resource amounts");
     let m = problem.machine_count as usize;
     println!("m={} and 1/e'={}", m, problem.one_over_epsilon_prime);
     let k_len = min(m, problem.one_over_epsilon_prime as usize);
     // List of K_i sets with pre-computed P_pre(K_i) per set
-    let mut k: Vec<(f64, Vec<GeneralizedConfiguration>)> = vec![(0.0, vec![]); k_len];
+    let mut k: Vec<(f64, GeneralizedSelection)> = vec![(0.0, GeneralizedSelection::new()); k_len];
     let mut p_pre = 0.0;
     for (c, x_c) in x_tilde
         .0
@@ -834,7 +847,7 @@ fn reduce_resource_amounts(
         let group = i - 1;
         p_pre += x_c;
         k[group].0 += x_c;
-        k[group].1.push(c);
+        k[group].1.add(c, x_c);
     }
 
     for (_, k_i) in k.iter_mut() {
