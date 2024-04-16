@@ -877,41 +877,34 @@ fn reduce_resource_amounts(
                 // p: the current processing time
                 // r: resource amount at last cut
                 |(mut stack, p, r, k), c| {
-                    let cut = k * step_width;
+                    let mut cut = k * step_width;
                     let processing_time = c.1;
-                    let (r, k) = if p - processing_time < cut {
-                        // we are cutting the configuration
+                    let end = p - processing_time;
+                    let (r, cuts_done) = if end < cut {
+                        let mut cuts_done = 0.0;
+                        let mut last_cut = p;
+                        while end < cut {
+                            let p_cut = last_cut - cut;
 
-                        // this is the part above the cut with the lower recource amount
-                        let p_cut = p - cut;
-                        stack.push(GeneralizedConfiguration {
-                            configuration: Configuration {
-                                processing_time: p_cut,
-                                ..c.0.configuration.clone()
-                            },
-                            window: Rc::from(Window {
-                                resource_amount: r,
-                                machine_count: c.0.window.machine_count,
-                            }),
-                        });
-
-                        // this is the part below the cut with current resource amount
-                        let iterations = (processing_time / step_width).ceil();
-                        let mid_iterations = iterations as i32 - 2;
-                        for _ in 0..mid_iterations {
                             stack.push(GeneralizedConfiguration {
                                 configuration: Configuration {
-                                    processing_time: step_width,
+                                    processing_time: p_cut,
                                     ..c.0.configuration.clone()
                                 },
-                                window: Rc::clone(&c.0.window),
+                                window: Rc::from(Window {
+                                    resource_amount: r,
+                                    machine_count: c.0.window.machine_count,
+                                }),
                             });
+
+                            cuts_done += 1.0;
+                            last_cut = cut;
+                            cut -= step_width;
                         }
+
                         stack.push(GeneralizedConfiguration {
                             configuration: Configuration {
-                                processing_time: processing_time
-                                    - p_cut
-                                    - max(0, mid_iterations) as f64 * step_width,
+                                processing_time: last_cut - end,
                                 ..c.0.configuration.clone()
                             },
                             window: Rc::clone(&c.0.window),
@@ -921,7 +914,7 @@ fn reduce_resource_amounts(
                             // for subsequent configs, we use the current resource amount
                             c.0.window.resource_amount,
                             // we usually decrement k, but for large configs we must make several steps at once
-                            k - iterations,
+                            cuts_done,
                         )
                     } else {
                         // we are not cutting the configuration, so we just use the resource amount from the last cut
@@ -932,10 +925,10 @@ fn reduce_resource_amounts(
                                 machine_count: c.0.window.machine_count,
                             }),
                         });
-                        (r, k)
+                        (r, 0.0)
                     };
 
-                    (stack, p - processing_time, r, k)
+                    (stack, p - processing_time, r, k - cuts_done)
                 },
             );
 
