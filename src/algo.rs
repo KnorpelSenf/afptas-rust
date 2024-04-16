@@ -3,12 +3,10 @@ use good_lp::{
     SolverModel, Variable,
 };
 use std::{
-    borrow::Borrow,
     cmp::{max, min, Ordering},
     collections::HashMap,
     fmt::Debug,
     hash::{Hash, Hasher},
-    intrinsics::exp2f64,
     rc::Rc,
 };
 
@@ -160,14 +158,12 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     let x = max_min(&problem_data);
     println!("Max-min solved with:");
     print_selection(job_len, machine_count, &x);
-    let (x_tilde, y_tilde) = generalize(&problem_data, x);
+    let (x_tilde, NarrowJobSelection(_y_tilde)) = generalize(&problem_data, x);
     println!("Generalized to:");
     print_gen_selection(job_len, machine_count, resource_limit, &x_tilde);
-    println!("-----");
-    for x in x_tilde.0.iter() {
-        println!("{:?}", x);
-    }
-    println!("-----");
+    // for x in x_tilde.0.iter() {
+    //     println!("{:?}", x);
+    // }
     let _k = reduce_resource_amounts(&problem_data, x_tilde);
 
     Schedule {
@@ -800,15 +796,15 @@ impl Debug for GeneralizedConfiguration {
 }
 #[derive(Clone, Debug)]
 struct GeneralizedSelection(HashMap<GeneralizedConfiguration, f64>);
-impl GeneralizedSelection {
-    fn new() -> Self {
-        GeneralizedSelection(HashMap::new())
-    }
-    fn add(&mut self, config: GeneralizedConfiguration, x_c: f64) {
-        let existing = self.0.get(&config).unwrap_or(&0.0);
-        self.0.insert(config, x_c + existing);
-    }
-}
+// impl GeneralizedSelection {
+//     fn new() -> Self {
+//         GeneralizedSelection(HashMap::new())
+//     }
+//     fn add(&mut self, config: GeneralizedConfiguration, x_c: f64) {
+//         let existing = self.0.get(&config).unwrap_or(&0.0);
+//         self.0.insert(config, x_c + existing);
+//     }
+// }
 
 #[derive(PartialEq, Eq, Hash)]
 struct NarrowJobConfiguration {
@@ -829,13 +825,14 @@ struct NarrowJobSelection(HashMap<NarrowJobConfiguration, f64>);
 fn reduce_resource_amounts(
     problem: &ProblemData,
     x_tilde: GeneralizedSelection,
-) -> GeneralizedSelection {
+) -> Vec<Vec<GeneralizedConfiguration>> {
     println!("Reducing resource amounts");
     let m = problem.machine_count as usize;
     println!("m={} and 1/e'={}", m, problem.one_over_epsilon_prime);
     let k_len = min(m, problem.one_over_epsilon_prime as usize);
-    // List of K_i sets with pre-computed P_pre(K_i) per set
-    let mut k: Vec<(f64, GeneralizedSelection)> = vec![(0.0, GeneralizedSelection::new()); k_len];
+    // List of K_i sets with pre-computed P_pre(K_i) per set, where i+1 than the number of machines,
+    // and using a vector of pairs as an ordered version of a generalized selection.
+    let mut k: Vec<(f64, Vec<(GeneralizedConfiguration, f64)>)> = vec![(0.0, vec![]); k_len];
     let mut p_pre = 0.0;
     for (c, x_c) in x_tilde
         .0
@@ -847,22 +844,23 @@ fn reduce_resource_amounts(
         let group = i - 1;
         p_pre += x_c;
         k[group].0 += x_c;
-        k[group].1.add(c, x_c);
+        k[group].1.push((c, x_c));
     }
 
     for (_, k_i) in k.iter_mut() {
         k_i.sort_by(|c0, c1| {
-            c0.configuration
+            c0.0.configuration
                 .resource_amount
-                .partial_cmp(&c1.configuration.resource_amount)
+                .partial_cmp(&c1.0.configuration.resource_amount)
                 .expect(&format!(
                     "could not comare resource amounts {} and {}",
-                    c0.configuration.resource_amount, c1.configuration.resource_amount
+                    c0.0.configuration.resource_amount, c1.0.configuration.resource_amount
                 ))
         });
     }
 
     let p_pre = p_pre; // end mut
+    let k = k; // end mut
     println!("P_pre={p_pre}");
     let step_width = problem.epsilon_prime_squared * p_pre;
     println!("Step width is {step_width}");
@@ -877,7 +875,7 @@ fn reduce_resource_amounts(
                 // r: resource amount at last cut
                 |(mut stack, p, r, k), c| {
                     let cut = k * step_width;
-                    let processing_time = c.configuration.processing_time;
+                    let processing_time = c.0.configuration.processing_time;
                     let (r, k) = if p - processing_time < cut {
                         // we are cutting the configuration
 
@@ -886,11 +884,11 @@ fn reduce_resource_amounts(
                         stack.push(GeneralizedConfiguration {
                             configuration: Configuration {
                                 processing_time: p_cut,
-                                ..c.configuration.clone()
+                                ..c.0.configuration.clone()
                             },
                             window: Rc::from(Window {
                                 resource_amount: r,
-                                machine_count: c.window.machine_count,
+                                machine_count: c.0.window.machine_count,
                             }),
                         });
 
@@ -898,24 +896,24 @@ fn reduce_resource_amounts(
                         stack.push(GeneralizedConfiguration {
                             configuration: Configuration {
                                 processing_time: processing_time - p_cut,
-                                ..c.configuration
+                                ..c.0.configuration
                             },
-                            window: Rc::clone(&c.window),
+                            window: Rc::clone(&c.0.window),
                         });
 
                         (
                             // for subsequent configs, we use the current resource amount
-                            c.window.resource_amount,
+                            c.0.window.resource_amount,
                             // we usually decrement k, but for large configs we must make several steps at once
                             k - (processing_time / step_width).ceil(),
                         )
                     } else {
                         // we are not cutting the configuration, so we just use the resource amount from the last cut
                         stack.push(GeneralizedConfiguration {
-                            configuration: c.configuration,
+                            configuration: c.0.configuration,
                             window: Rc::from(Window {
                                 resource_amount: r,
-                                machine_count: c.window.machine_count,
+                                machine_count: c.0.window.machine_count,
                             }),
                         });
                         (r, k)
@@ -929,8 +927,9 @@ fn reduce_resource_amounts(
             stacks
         });
 
+    println!("Reduced {} stacks:", stacks.len());
     for (i, stack) in stacks.iter().enumerate() {
-        println!("K_{}={:?} (len={})", i + 1, stack, stack.len());
+        println!("K_{} = {:?} (len={})", i + 1, stack, stack.len());
     }
 
     stacks
