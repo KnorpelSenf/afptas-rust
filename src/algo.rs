@@ -944,7 +944,7 @@ fn reduce_resource_amounts(
         });
 
     for (i, stack) in stacks.iter().enumerate() {
-        println!("  --- K_{i} ---  ");
+        println!("  --- K_{} ---  ", i + 1);
         let mut p = 0.0;
         for config in stack {
             print!("{:?}", config);
