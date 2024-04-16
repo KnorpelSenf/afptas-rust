@@ -840,7 +840,10 @@ fn reduce_resource_amounts(
         .filter(|(c, _)| c.configuration.machine_count > 0)
     {
         let i = c.configuration.machine_count as usize;
-        println!("{i} machines used in config {:?}", c);
+        println!(
+            "{i} machines used in config {:?} which was selected {x_c}",
+            c
+        );
         let group = i - 1;
         p_pre += x_c;
         k[group].0 += x_c;
@@ -849,13 +852,10 @@ fn reduce_resource_amounts(
 
     for (_, k_i) in k.iter_mut() {
         k_i.sort_by(|c0, c1| {
-            c0.0.configuration
-                .resource_amount
-                .partial_cmp(&c1.0.configuration.resource_amount)
-                .expect(&format!(
-                    "could not comare resource amounts {} and {}",
-                    c0.0.configuration.resource_amount, c1.0.configuration.resource_amount
-                ))
+            c0.1.partial_cmp(&c1.1).expect(&format!(
+                "could not comare resource amounts {} and {}",
+                c0.1, c1.1
+            ))
         });
     }
 
@@ -875,7 +875,7 @@ fn reduce_resource_amounts(
                 // r: resource amount at last cut
                 |(mut stack, p, r, k), c| {
                     let cut = k * step_width;
-                    let processing_time = c.0.configuration.processing_time;
+                    let processing_time = c.1;
                     let (r, k) = if p - processing_time < cut {
                         // we are cutting the configuration
 
