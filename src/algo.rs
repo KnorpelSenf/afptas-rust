@@ -852,10 +852,13 @@ fn reduce_resource_amounts(
 
     for (_, k_i) in k.iter_mut() {
         k_i.sort_by(|c0, c1| {
-            c0.1.partial_cmp(&c1.1).expect(&format!(
-                "could not comare resource amounts {} and {}",
-                c0.1, c1.1
-            ))
+            c0.0.configuration
+                .resource_amount
+                .partial_cmp(&c1.0.configuration.resource_amount)
+                .expect(&format!(
+                    "could not comare resource amounts {} and {}",
+                    c0.0.configuration.resource_amount, c1.0.configuration.resource_amount
+                ))
         });
     }
 
