@@ -943,9 +943,19 @@ fn reduce_resource_amounts(
             stacks
         });
 
-    println!("Reduced {} stacks:", stacks.len());
     for (i, stack) in stacks.iter().enumerate() {
-        println!("K_{} = {:?} (len={})", i + 1, stack, stack.len());
+        println!("  --- K_{i} ---  ");
+        let mut p = 0.0;
+        for config in stack {
+            print!("{:?}", config);
+            p += config.configuration.processing_time;
+            if p >= step_width {
+                println!(" -- CUT {p}");
+                p = 0.0;
+            } else {
+                println!();
+            }
+        }
     }
 
     stacks
