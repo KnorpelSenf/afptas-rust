@@ -896,10 +896,23 @@ fn reduce_resource_amounts(
                         });
 
                         // this is the part below the cut with current resource amount
+                        let iterations = (processing_time / step_width).ceil();
+                        let mid_iterations = iterations as i32 - 2;
+                        for _ in 0..mid_iterations {
+                            stack.push(GeneralizedConfiguration {
+                                configuration: Configuration {
+                                    processing_time: step_width,
+                                    ..c.0.configuration.clone()
+                                },
+                                window: Rc::clone(&c.0.window),
+                            });
+                        }
                         stack.push(GeneralizedConfiguration {
                             configuration: Configuration {
-                                processing_time: processing_time - p_cut,
-                                ..c.0.configuration
+                                processing_time: processing_time
+                                    - p_cut
+                                    - max(0, mid_iterations) as f64 * step_width,
+                                ..c.0.configuration.clone()
                             },
                             window: Rc::clone(&c.0.window),
                         });
@@ -908,7 +921,7 @@ fn reduce_resource_amounts(
                             // for subsequent configs, we use the current resource amount
                             c.0.window.resource_amount,
                             // we usually decrement k, but for large configs we must make several steps at once
-                            k - (processing_time / step_width).ceil(),
+                            k - iterations,
                         )
                     } else {
                         // we are not cutting the configuration, so we just use the resource amount from the last cut
