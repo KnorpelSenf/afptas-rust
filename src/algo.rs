@@ -164,7 +164,8 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     // for x in x_tilde.0.iter() {
     //     println!("{:?}", x);
     // }
-    let _k = reduce_resource_amounts(&problem_data, x_tilde);
+    let _x_bar = reduce_resource_amounts(&problem_data, x_tilde);
+    let _y_bar = assign_narrow_jobs();
 
     Schedule {
         mapping: Box::from(vec![]),
@@ -276,6 +277,15 @@ impl Debug for Configuration {
     }
 }
 impl Configuration {
+    fn empty() -> Self {
+        Configuration {
+            jobs: vec![],
+            index: HashMap::new(),
+            processing_time: 0.0,
+            resource_amount: 0.0,
+            machine_count: 0,
+        }
+    }
     fn new(jobs: Vec<(Rc<Job>, i32)>) -> Self {
         if jobs.windows(2).any(|pair| pair[0].0.id >= pair[1].0.id) {
             panic!("jobs are out of order");
@@ -872,7 +882,7 @@ fn reduce_resource_amounts(
         k.into_iter().fold(vec![], |mut stacks, (sum, configs)| {
             // we fold the stack top-to-bottom, reducing the processing time at every step,
             // and reducing the resouce amount as well as k whenever we make a cut
-            let (stack, _, _, _) = configs.into_iter().rev().fold(
+            let (mut stack, _, _, _) = configs.into_iter().rev().fold(
                 (vec![], sum, 0.0, (sum / step_width).ceil() - 1.0),
                 // p: the current processing time
                 // r: resource amount at last cut
@@ -932,6 +942,14 @@ fn reduce_resource_amounts(
                 },
             );
 
+            // TODO: investigate how the length can be eps'*P_pre
+            stack.push(GeneralizedConfiguration {
+                configuration: Configuration::empty(),
+                window: Rc::from(Window {
+                    resource_amount: problem.resource_limit,
+                    machine_count: problem.machine_count,
+                }),
+            });
             stacks.push(stack);
             stacks
         });
@@ -944,4 +962,15 @@ fn reduce_resource_amounts(
     }
 
     stacks
+}
+
+fn assign_narrow_jobs() {
+    // See page 1534 left bottom
+    // for job j in narrow_jobs
+    //   for config c in K_(i,k+1) # configurations between C(i,k) and C(i,k+1)
+    //     y_bar_(j,w_(i,k)) += P_pre(C)/P_pre(w(C)) * y_tilde_(j,w(C))
+    
+    // do the things on page 1534 right top
+
+    // return y_bar
 }
