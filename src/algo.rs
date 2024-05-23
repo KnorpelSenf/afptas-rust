@@ -836,6 +836,13 @@ fn reduce_resource_amounts(
     problem: &ProblemData,
     x_tilde: &GeneralizedSelection,
 ) -> Vec<Vec<GeneralizedConfiguration>> {
+    // FIXME: the above return type is bullshit, we have to return a
+    // GeneralizedSelection instead of a GeneralizedConfiguration. We currently
+    // throw away the runtime for each gen config, which we should not do. Hint:
+    // we may want to refactor GeneralizedSelection to store an order with its
+    // elements so that we no longer have to invent a different intermediate
+    // data strucutre in this procedure. Doing that would allow us to throw away
+    // the vector of pairs.
     println!("Reducing resource amounts");
     let m = problem.machine_count as usize;
     println!("m={} and 1/e'={}", m, problem.one_over_epsilon_prime);
@@ -893,6 +900,14 @@ fn reduce_resource_amounts(
                     let (r, cuts_done) = if end < cut {
                         let mut cuts_done = 0.0;
                         let mut last_cut = p;
+                        // FIXME: this is bullshit, we do not have to cut at
+                        // every intersection. Instead, we have to find the
+                        // biggest multiple only, which is defined by
+                        // epsilon_prime_squared * P_pre *
+                        // Math.floor(e(C^{i,k})/epsilon_prime_squared/P_pre) as
+                        // can be seen centrally in the left column on page
+                        // 1534. This lets us get rid of the while lopp
+                        // entirely.
                         while end < cut {
                             let p_cut = last_cut - cut;
 
@@ -965,6 +980,9 @@ fn reduce_resource_amounts(
 }
 
 fn assign_narrow_jobs(_x_tilde: &GeneralizedSelection, _y_tilde: &NarrowJobSelection) {
+    // TODO: fix the above FIXME and base the following impl on the above one
+    // for x_tilde
+
     // See page 1534 left bottom
     // for job j in narrow_jobs
     //   for config c in K_(i,k+1) # configurations between C(i,k) and C(i,k+1)
