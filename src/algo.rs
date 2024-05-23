@@ -158,14 +158,14 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     let x = max_min(&problem_data);
     println!("Max-min solved with:");
     print_selection(job_len, machine_count, &x);
-    let (x_tilde, NarrowJobSelection(_y_tilde)) = generalize(&problem_data, x);
+    let (x_tilde, y_tilde) = generalize(&problem_data, x);
     println!("Generalized to:");
     print_gen_selection(job_len, machine_count, resource_limit, &x_tilde);
     // for x in x_tilde.0.iter() {
     //     println!("{:?}", x);
     // }
-    let _x_bar = reduce_resource_amounts(&problem_data, x_tilde);
-    let _y_bar = assign_narrow_jobs();
+    let _x_bar = reduce_resource_amounts(&problem_data, &x_tilde);
+    let _y_bar = assign_narrow_jobs(&x_tilde, &y_tilde);
 
     Schedule {
         mapping: Box::from(vec![]),
@@ -834,7 +834,7 @@ struct NarrowJobSelection(HashMap<NarrowJobConfiguration, f64>);
 
 fn reduce_resource_amounts(
     problem: &ProblemData,
-    x_tilde: GeneralizedSelection,
+    x_tilde: &GeneralizedSelection,
 ) -> Vec<Vec<GeneralizedConfiguration>> {
     println!("Reducing resource amounts");
     let m = problem.machine_count as usize;
@@ -842,11 +842,11 @@ fn reduce_resource_amounts(
     let k_len = min(m, problem.one_over_epsilon_prime as usize);
     // List of K_i sets with pre-computed P_pre(K_i) per set, where i+1 than the number of machines,
     // and using a vector of pairs as an ordered version of a generalized selection.
-    let mut k: Vec<(f64, Vec<(GeneralizedConfiguration, f64)>)> = vec![(0.0, vec![]); k_len];
+    let mut k: Vec<(f64, Vec<(&GeneralizedConfiguration, &f64)>)> = vec![(0.0, vec![]); k_len];
     let mut p_pre = 0.0;
     for (c, x_c) in x_tilde
         .0
-        .into_iter()
+        .iter()
         .filter(|(c, _)| c.configuration.machine_count > 0)
     {
         let i = c.configuration.machine_count as usize;
@@ -857,7 +857,7 @@ fn reduce_resource_amounts(
         let group = i - 1;
         p_pre += x_c;
         k[group].0 += x_c;
-        k[group].1.push((c, x_c));
+        k[group].1.push((&c, x_c));
     }
 
     for (_, k_i) in k.iter_mut() {
@@ -929,7 +929,7 @@ fn reduce_resource_amounts(
                     } else {
                         // we are not cutting the configuration, so we just use the resource amount from the last cut
                         stack.push(GeneralizedConfiguration {
-                            configuration: c.0.configuration,
+                            configuration: c.0.configuration.clone(),
                             window: Rc::from(Window {
                                 resource_amount: r,
                                 machine_count: c.0.window.machine_count,
@@ -964,12 +964,12 @@ fn reduce_resource_amounts(
     stacks
 }
 
-fn assign_narrow_jobs() {
+fn assign_narrow_jobs(_x_tilde: &GeneralizedSelection, _y_tilde: &NarrowJobSelection) {
     // See page 1534 left bottom
     // for job j in narrow_jobs
     //   for config c in K_(i,k+1) # configurations between C(i,k) and C(i,k+1)
     //     y_bar_(j,w_(i,k)) += P_pre(C)/P_pre(w(C)) * y_tilde_(j,w(C))
-    
+
     // do the things on page 1534 right top
 
     // return y_bar
