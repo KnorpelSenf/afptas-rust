@@ -502,7 +502,7 @@ fn print_gen_selection(job_len: usize, m: i32, r: f64, x: &GeneralizedSelection)
     );
     println!("{:>lcol$} | {:<mcol$} | Length", "Jobs", "w=(m,r)",);
     println!("{:->lcol$}---{:-<mcol$}---{}", "-", "-", "-".repeat(19));
-    for (c, x_c) in x.0.iter() {
+    for (c, x_c) in x.configurations.iter() {
         let job_ids = c
             .configuration
             .jobs
@@ -735,7 +735,10 @@ fn generalize(problem: &ProblemData, x: Selection) -> (GeneralizedSelection, Nar
                 },
             );
 
-    (GeneralizedSelection(x_tilde), NarrowJobSelection(y_tilde))
+    (
+        GeneralizedSelection::from(x_tilde),
+        NarrowJobSelection(y_tilde),
+    )
 }
 
 #[derive(Clone)]
@@ -805,16 +808,36 @@ impl Debug for GeneralizedConfiguration {
     }
 }
 #[derive(Clone, Debug)]
-struct GeneralizedSelection(HashMap<GeneralizedConfiguration, f64>);
-// impl GeneralizedSelection {
-//     fn new() -> Self {
-//         GeneralizedSelection(HashMap::new())
-//     }
-//     fn add(&mut self, config: GeneralizedConfiguration, x_c: f64) {
-//         let existing = self.0.get(&config).unwrap_or(&0.0);
-//         self.0.insert(config, x_c + existing);
-//     }
-// }
+struct GeneralizedSelection {
+    configurations: Vec<(GeneralizedConfiguration, f64)>,
+    index: HashMap<GeneralizedConfiguration, usize>,
+}
+impl GeneralizedSelection {
+    fn new() -> Self {
+        GeneralizedSelection {
+            configurations: vec![],
+            index: HashMap::new(),
+        }
+    }
+    fn from(mapping: HashMap<GeneralizedConfiguration, f64>) -> Self {
+        let mut sel = GeneralizedSelection::new();
+        for (config, x_c) in mapping.into_iter() {
+            sel.set(config, x_c);
+        }
+        sel
+    }
+    fn get(&self, config: &GeneralizedConfiguration) -> Option<f64> {
+        Some(self.configurations[*self.index.get(config)?].1)
+    }
+    fn set(&mut self, config: GeneralizedConfiguration, x_c: f64) {
+        let posiiton = self.index.entry(config).or_insert_with(|| {
+            let pos = self.configurations.len();
+            self.configurations.push((config, 0.0));
+            pos
+        });
+        self.configurations[*posiiton].1 = x_c;
+    }
+}
 
 #[derive(PartialEq, Eq, Hash)]
 struct NarrowJobConfiguration {
@@ -835,7 +858,7 @@ struct NarrowJobSelection(HashMap<NarrowJobConfiguration, f64>);
 fn reduce_resource_amounts(
     problem: &ProblemData,
     x_tilde: &GeneralizedSelection,
-) -> Vec<Vec<GeneralizedConfiguration>> {
+) -> Vec<Vec<GeneralizedSelection>> {
     // FIXME: the above return type is bullshit, we have to return a
     // GeneralizedSelection instead of a GeneralizedConfiguration. We currently
     // throw away the runtime for each gen config, which we should not do. Hint:
@@ -852,7 +875,7 @@ fn reduce_resource_amounts(
     let mut k: Vec<(f64, Vec<(&GeneralizedConfiguration, &f64)>)> = vec![(0.0, vec![]); k_len];
     let mut p_pre = 0.0;
     for (c, x_c) in x_tilde
-        .0
+        .configurations
         .iter()
         .filter(|(c, _)| c.configuration.machine_count > 0)
     {
@@ -885,7 +908,7 @@ fn reduce_resource_amounts(
     let step_width = problem.epsilon_prime_squared * p_pre;
     println!("Step width is {step_width}");
 
-    let stacks: Vec<Vec<GeneralizedConfiguration>> =
+    let stacks: Vec<GeneralizedConfiguration> =
         k.into_iter().fold(vec![], |mut stacks, (sum, configs)| {
             // we fold the stack top-to-bottom, reducing the processing time at every step,
             // and reducing the resouce amount as well as k whenever we make a cut
