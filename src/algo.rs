@@ -809,8 +809,8 @@ impl Debug for GeneralizedConfiguration {
 }
 #[derive(Clone, Debug)]
 struct GeneralizedSelection {
-    configurations: Vec<(GeneralizedConfiguration, f64)>,
-    index: HashMap<GeneralizedConfiguration, usize>,
+    configurations: Vec<(Rc<GeneralizedConfiguration>, f64)>,
+    index: HashMap<Rc<GeneralizedConfiguration>, usize>,
 }
 impl GeneralizedSelection {
     fn new() -> Self {
@@ -826,16 +826,17 @@ impl GeneralizedSelection {
         }
         sel
     }
-    fn get(&self, config: &GeneralizedConfiguration) -> Option<f64> {
-        Some(self.configurations[*self.index.get(config)?].1)
-    }
+    // fn get(&self, config: &GeneralizedConfiguration) -> Option<f64> {
+    //     Some(self.configurations[*self.index.get(config)?].1)
+    // }
     fn set(&mut self, config: GeneralizedConfiguration, x_c: f64) {
-        let posiiton = self.index.entry(config).or_insert_with(|| {
+        let c = Rc::from(config);
+        let position = self.index.entry(Rc::clone(&c)).or_insert_with(|| {
             let pos = self.configurations.len();
-            self.configurations.push((config, 0.0));
+            self.configurations.push((c, 0.0));
             pos
         });
-        self.configurations[*posiiton].1 = x_c;
+        self.configurations[*position].1 = x_c;
     }
 }
 
@@ -858,13 +859,13 @@ struct NarrowJobSelection(HashMap<NarrowJobConfiguration, f64>);
 fn reduce_resource_amounts(
     problem: &ProblemData,
     x_tilde: &GeneralizedSelection,
-) -> Vec<Vec<GeneralizedSelection>> {
+) -> Vec<GeneralizedSelection> {
     // FIXME: the above return type is bullshit, we have to return a
     // GeneralizedSelection instead of a GeneralizedConfiguration. We currently
     // throw away the runtime for each gen config, which we should not do. Hint:
     // we may want to refactor GeneralizedSelection to store an order with its
     // elements so that we no longer have to invent a different intermediate
-    // data strucutre in this procedure. Doing that would allow us to throw away
+    // data structure in this procedure. Doing that would allow us to throw away
     // the vector of pairs.
     println!("Reducing resource amounts");
     let m = problem.machine_count as usize;
@@ -908,12 +909,17 @@ fn reduce_resource_amounts(
     let step_width = problem.epsilon_prime_squared * p_pre;
     println!("Step width is {step_width}");
 
-    let stacks: Vec<GeneralizedConfiguration> =
+    let stacks: Vec<GeneralizedSelection> =
         k.into_iter().fold(vec![], |mut stacks, (sum, configs)| {
             // we fold the stack top-to-bottom, reducing the processing time at every step,
-            // and reducing the resouce amount as well as k whenever we make a cut
+            // and reducing the resource amount as well as k whenever we make a cut
             let (mut stack, _, _, _) = configs.into_iter().rev().fold(
-                (vec![], sum, 0.0, (sum / step_width).ceil() - 1.0),
+                (
+                    GeneralizedSelection::new(),
+                    sum,
+                    0.0,
+                    (sum / step_width).ceil() - 1.0,
+                ),
                 // p: the current processing time
                 // r: resource amount at last cut
                 |(mut stack, p, r, k), c| {
@@ -929,34 +935,34 @@ fn reduce_resource_amounts(
                         // epsilon_prime_squared * P_pre *
                         // Math.floor(e(C^{i,k})/epsilon_prime_squared/P_pre) as
                         // can be seen centrally in the left column on page
-                        // 1534. This lets us get rid of the while lopp
+                        // 1534. This lets us get rid of the while loop
                         // entirely.
                         while end < cut {
                             let p_cut = last_cut - cut;
 
-                            stack.push(GeneralizedConfiguration {
-                                configuration: Configuration {
-                                    processing_time: p_cut,
-                                    ..c.0.configuration.clone()
+                            stack.set(
+                                GeneralizedConfiguration {
+                                    configuration: c.0.configuration.clone(),
+                                    window: Rc::from(Window {
+                                        resource_amount: r,
+                                        machine_count: c.0.window.machine_count,
+                                    }),
                                 },
-                                window: Rc::from(Window {
-                                    resource_amount: r,
-                                    machine_count: c.0.window.machine_count,
-                                }),
-                            });
+                                p_cut,
+                            );
 
                             cuts_done += 1.0;
                             last_cut = cut;
                             cut -= step_width;
                         }
 
-                        stack.push(GeneralizedConfiguration {
-                            configuration: Configuration {
-                                processing_time: last_cut - end,
-                                ..c.0.configuration.clone()
+                        stack.set(
+                            GeneralizedConfiguration {
+                                configuration: c.0.configuration.clone(),
+                                window: Rc::clone(&c.0.window),
                             },
-                            window: Rc::clone(&c.0.window),
-                        });
+                            last_cut - end,
+                        );
 
                         (
                             // for subsequent configs, we use the current resource amount
@@ -966,13 +972,16 @@ fn reduce_resource_amounts(
                         )
                     } else {
                         // we are not cutting the configuration, so we just use the resource amount from the last cut
-                        stack.push(GeneralizedConfiguration {
-                            configuration: c.0.configuration.clone(),
-                            window: Rc::from(Window {
-                                resource_amount: r,
-                                machine_count: c.0.window.machine_count,
-                            }),
-                        });
+                        stack.set(
+                            GeneralizedConfiguration {
+                                configuration: c.0.configuration.clone(),
+                                window: Rc::from(Window {
+                                    resource_amount: r,
+                                    machine_count: c.0.window.machine_count,
+                                }),
+                            },
+                            42.0, // TODO: implement
+                        );
                         (r, 0.0)
                     };
 
@@ -981,21 +990,24 @@ fn reduce_resource_amounts(
             );
 
             // TODO: investigate how the length can be eps'*P_pre
-            stack.push(GeneralizedConfiguration {
-                configuration: Configuration::empty(),
-                window: Rc::from(Window {
-                    resource_amount: problem.resource_limit,
-                    machine_count: problem.machine_count,
-                }),
-            });
+            stack.set(
+                GeneralizedConfiguration {
+                    configuration: Configuration::empty(),
+                    window: Rc::from(Window {
+                        resource_amount: problem.resource_limit,
+                        machine_count: problem.machine_count,
+                    }),
+                },
+                42.0, // TODO: implement
+            );
             stacks.push(stack);
             stacks
         });
 
     for (i, stack) in stacks.iter().enumerate() {
         println!("  --- K_{} ---  ", i + 1);
-        for config in stack {
-            println!("{:?}", config);
+        for (config, x_c) in stack.configurations.iter() {
+            println!("{:?}: {}", config, x_c);
         }
     }
 
