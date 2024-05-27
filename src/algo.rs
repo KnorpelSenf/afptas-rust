@@ -747,6 +747,12 @@ struct Window {
     machine_count: i32,
 }
 impl Window {
+    fn empty() -> Self {
+        Window {
+            resource_amount: 0.0,
+            machine_count: 0,
+        }
+    }
     fn main(problem: &ProblemData, config: &Configuration) -> Self {
         let machine_count = problem.machine_count - config.machine_count;
         let resource_amount = if machine_count == 0 {
@@ -809,34 +815,62 @@ impl Debug for GeneralizedConfiguration {
 }
 #[derive(Clone, Debug)]
 struct GeneralizedSelection {
-    configurations: Vec<(Rc<GeneralizedConfiguration>, f64)>,
-    index: HashMap<Rc<GeneralizedConfiguration>, usize>,
+    configurations: Vec<(GeneralizedConfiguration, f64)>,
+    // configurations: Vec<(Rc<GeneralizedConfiguration>, f64)>,
+    // index: HashMap<Rc<GeneralizedConfiguration>, usize>,
 }
 impl GeneralizedSelection {
-    fn new() -> Self {
+    fn empty() -> Self {
         GeneralizedSelection {
             configurations: vec![],
-            index: HashMap::new(),
+            // index: HashMap::new(),
         }
     }
     fn from(mapping: HashMap<GeneralizedConfiguration, f64>) -> Self {
-        let mut sel = GeneralizedSelection::new();
-        for (config, x_c) in mapping.into_iter() {
-            sel.set(config, x_c);
+        GeneralizedSelection {
+            configurations: mapping.into_iter().collect(),
         }
-        sel
+        // let mut sel = GeneralizedSelection::empty();
+        // for (config, x_c) in mapping.into_iter() {
+        //     sel.set(config, x_c);
+        // }
+        // sel
+    }
+    fn merge(selections: Vec<GeneralizedSelection>) -> Self {
+        GeneralizedSelection {
+            configurations: selections
+                .into_iter()
+                .flat_map(|s| s.configurations)
+                .collect(),
+        }
+    }
+    fn push(&mut self, config: GeneralizedConfiguration, x_c: f64) {
+        self.configurations.push((config, x_c));
     }
     // fn get(&self, config: &GeneralizedConfiguration) -> Option<f64> {
     //     Some(self.configurations[*self.index.get(config)?].1)
     // }
-    fn set(&mut self, config: GeneralizedConfiguration, x_c: f64) {
-        let c = Rc::from(config);
-        let position = self.index.entry(Rc::clone(&c)).or_insert_with(|| {
-            let pos = self.configurations.len();
-            self.configurations.push((c, 0.0));
-            pos
-        });
-        self.configurations[*position].1 = x_c;
+    // fn set(&mut self, config: GeneralizedConfiguration, x_c: f64) {
+    //     let c = Rc::from(config);
+    //     let position = self.index.entry(Rc::clone(&c)).or_insert_with(|| {
+    //         let pos = self.configurations.len();
+    //         self.configurations.push((c, 0.0));
+    //         pos
+    //     });
+    //     self.configurations[*position].1 = x_c;
+    // }
+    // fn add(&mut self, config: &Rc<GeneralizedConfiguration>, x_c: &f64) {
+    //     let position = self.index.get(config).expect("cannot add to missing value");
+    //     self.configurations[*position].1 += x_c;
+    // }
+    fn sort_by_resource_amount(&mut self) {
+        self.configurations.sort_by(|left, right| {
+            left.0
+                .configuration
+                .resource_amount
+                .partial_cmp(&right.0.configuration.resource_amount)
+                .expect("cannot compare resource amounts")
+        })
     }
 }
 
@@ -859,21 +893,13 @@ struct NarrowJobSelection(HashMap<NarrowJobConfiguration, f64>);
 fn reduce_resource_amounts(
     problem: &ProblemData,
     x_tilde: &GeneralizedSelection,
-) -> Vec<GeneralizedSelection> {
-    // FIXME: the above return type is bullshit, we have to return a
-    // GeneralizedSelection instead of a GeneralizedConfiguration. We currently
-    // throw away the runtime for each gen config, which we should not do. Hint:
-    // we may want to refactor GeneralizedSelection to store an order with its
-    // elements so that we no longer have to invent a different intermediate
-    // data structure in this procedure. Doing that would allow us to throw away
-    // the vector of pairs.
+) -> GeneralizedSelection {
     println!("Reducing resource amounts");
     let m = problem.machine_count as usize;
     println!("m={} and 1/e'={}", m, problem.one_over_epsilon_prime);
     let k_len = min(m, problem.one_over_epsilon_prime as usize);
-    // List of K_i sets with pre-computed P_pre(K_i) per set, where i+1 than the number of machines,
-    // and using a vector of pairs as an ordered version of a generalized selection.
-    let mut k: Vec<(f64, Vec<(&GeneralizedConfiguration, &f64)>)> = vec![(0.0, vec![]); k_len];
+    // List of K_i sets with pre-computed P_pre(K_i) per set, where i+1 than the number of machines
+    let mut k: Vec<(f64, GeneralizedSelection)> = vec![(0.0, GeneralizedSelection::empty()); k_len];
     let mut p_pre = 0.0;
     for (c, x_c) in x_tilde
         .configurations
@@ -888,20 +914,12 @@ fn reduce_resource_amounts(
         let group = i - 1;
         p_pre += x_c;
         k[group].0 += x_c;
-        k[group].1.push((&c, x_c));
+        k[group].1.push(c.clone(), *x_c);
     }
 
-    for (_, k_i) in k.iter_mut() {
-        k_i.sort_by(|c0, c1| {
-            c0.0.configuration
-                .resource_amount
-                .partial_cmp(&c1.0.configuration.resource_amount)
-                .expect(&format!(
-                    "could not comare resource amounts {} and {}",
-                    c0.0.configuration.resource_amount, c1.0.configuration.resource_amount
-                ))
-        });
-    }
+    k.iter_mut().for_each(|(_, k_i)| {
+        k_i.sort_by_resource_amount();
+    });
 
     let p_pre = p_pre; // end mut
     let k = k; // end mut
@@ -909,100 +927,54 @@ fn reduce_resource_amounts(
     let step_width = problem.epsilon_prime_squared * p_pre;
     println!("Step width is {step_width}");
 
-    let stacks: Vec<GeneralizedSelection> =
-        k.into_iter().fold(vec![], |mut stacks, (sum, configs)| {
-            // we fold the stack top-to-bottom, reducing the processing time at every step,
-            // and reducing the resource amount as well as k whenever we make a cut
-            let (mut stack, _, _, _) = configs.into_iter().rev().fold(
-                (
-                    GeneralizedSelection::new(),
-                    sum,
-                    0.0,
-                    (sum / step_width).ceil() - 1.0,
-                ),
-                // p: the current processing time
-                // r: resource amount at last cut
-                |(mut stack, p, r, k), c| {
-                    let mut cut = k * step_width;
-                    let processing_time = c.1;
-                    let end = p - processing_time;
-                    let (r, cuts_done) = if end < cut {
-                        let mut cuts_done = 0.0;
-                        let mut last_cut = p;
-                        // FIXME: this is bullshit, we do not have to cut at
-                        // every intersection. Instead, we have to find the
-                        // biggest multiple only, which is defined by
-                        // epsilon_prime_squared * P_pre *
-                        // Math.floor(e(C^{i,k})/epsilon_prime_squared/P_pre) as
-                        // can be seen centrally in the left column on page
-                        // 1534. This lets us get rid of the while loop
-                        // entirely.
-                        while end < cut {
-                            let p_cut = last_cut - cut;
+    let stacks: Vec<GeneralizedSelection> = k
+        .into_iter()
+        .map(|(x_c, k_i)| {
+            let (sel, _, _) = k_i
+                .configurations
+                .into_iter()
+                // fold over configs in this stack
+                // - processing time: remaining distance to the bottom of the stack
+                // - window: current window size to be added to each config
+                // - generalized selection that is a vector of all the configuration snippets
+                .fold(
+                    (
+                        GeneralizedSelection::empty(),
+                        x_c,
+                        Rc::from(Window::empty()),
+                    ),
+                    |(mut sel, curr_p, curr_w), (c, mut p)| {
+                        let new_p = curr_p - p;
+                        let mut new_w = curr_w;
+                        let is_cut = (curr_p / step_width).ceil() != (new_p / step_width).ceil();
 
-                            stack.set(
+                        if is_cut {
+                            let p_cut = (curr_p / step_width).ceil() * step_width;
+                            sel.push(
                                 GeneralizedConfiguration {
-                                    configuration: c.0.configuration.clone(),
-                                    window: Rc::from(Window {
-                                        resource_amount: r,
-                                        machine_count: c.0.window.machine_count,
-                                    }),
+                                    configuration: c.configuration.clone(),
+                                    window: Rc::clone(&new_w),
                                 },
                                 p_cut,
                             );
-
-                            cuts_done += 1.0;
-                            last_cut = cut;
-                            cut -= step_width;
+                            new_w = c.window;
+                            p -= p_cut;
                         }
 
-                        stack.set(
+                        sel.push(
                             GeneralizedConfiguration {
-                                configuration: c.0.configuration.clone(),
-                                window: Rc::clone(&c.0.window),
+                                configuration: c.configuration,
+                                window: Rc::clone(&new_w),
                             },
-                            last_cut - end,
+                            p,
                         );
 
-                        (
-                            // for subsequent configs, we use the current resource amount
-                            c.0.window.resource_amount,
-                            // we usually decrement k, but for large configs we must make several steps at once
-                            cuts_done,
-                        )
-                    } else {
-                        // we are not cutting the configuration, so we just use the resource amount from the last cut
-                        stack.set(
-                            GeneralizedConfiguration {
-                                configuration: c.0.configuration.clone(),
-                                window: Rc::from(Window {
-                                    resource_amount: r,
-                                    machine_count: c.0.window.machine_count,
-                                }),
-                            },
-                            42.0, // TODO: implement
-                        );
-                        (r, 0.0)
-                    };
-
-                    (stack, p - processing_time, r, k - cuts_done)
-                },
-            );
-
-            // TODO: investigate how the length can be eps'*P_pre
-            stack.set(
-                GeneralizedConfiguration {
-                    configuration: Configuration::empty(),
-                    window: Rc::from(Window {
-                        resource_amount: problem.resource_limit,
-                        machine_count: problem.machine_count,
-                    }),
-                },
-                42.0, // TODO: implement
-            );
-            stacks.push(stack);
-            stacks
-        });
+                        (sel, new_p, new_w)
+                    },
+                );
+            sel
+        })
+        .collect();
 
     for (i, stack) in stacks.iter().enumerate() {
         println!("  --- K_{} ---  ", i + 1);
@@ -1011,7 +983,7 @@ fn reduce_resource_amounts(
         }
     }
 
-    stacks
+    GeneralizedSelection::merge(stacks)
 }
 
 fn assign_narrow_jobs(_x_tilde: &GeneralizedSelection, _y_tilde: &NarrowJobSelection) {
