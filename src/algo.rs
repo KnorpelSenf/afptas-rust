@@ -949,7 +949,7 @@ fn reduce_resource_amounts(
                         let is_cut = (curr_p / step_width).ceil() != (new_p / step_width).ceil();
 
                         if is_cut {
-                            let p_cut = (curr_p / step_width).ceil() * step_width;
+                            let p_cut = ((curr_p / step_width).ceil() * step_width) - curr_p;
                             sel.push(
                                 GeneralizedConfiguration {
                                     configuration: c.configuration.clone(),
