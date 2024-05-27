@@ -895,34 +895,8 @@ fn reduce_resource_amounts(
     x_tilde: &GeneralizedSelection,
 ) -> GeneralizedSelection {
     println!("Reducing resource amounts");
-    let m = problem.machine_count as usize;
-    println!("m={} and 1/e'={}", m, problem.one_over_epsilon_prime);
-    let k_len = min(m, problem.one_over_epsilon_prime as usize);
-    // List of K_i sets with pre-computed P_pre(K_i) per set, where i+1 than the number of machines
-    let mut k: Vec<(f64, GeneralizedSelection)> = vec![(0.0, GeneralizedSelection::empty()); k_len];
-    let mut p_pre = 0.0;
-    for (c, x_c) in x_tilde
-        .configurations
-        .iter()
-        .filter(|(c, _)| c.configuration.machine_count > 0)
-    {
-        let i = c.configuration.machine_count as usize;
-        println!(
-            "{i} machines used in config {:?} which was selected {x_c}",
-            c
-        );
-        let group = i - 1;
-        p_pre += x_c;
-        k[group].0 += x_c;
-        k[group].1.push(c.clone(), *x_c);
-    }
+    let (p_pre, k) = group_by_machine_count(problem, x_tilde);
 
-    k.iter_mut().for_each(|(_, k_i)| {
-        k_i.sort_by_resource_amount();
-    });
-
-    let p_pre = p_pre; // end mut
-    let k = k; // end mut
     println!("P_pre={p_pre}");
     let step_width = problem.epsilon_prime_squared * p_pre;
     println!("Step width is {step_width}");
@@ -985,6 +959,39 @@ fn reduce_resource_amounts(
     }
 
     GeneralizedSelection::merge(stacks)
+}
+
+fn group_by_machine_count(
+    problem: &ProblemData,
+    x_tilde: &GeneralizedSelection,
+) -> (f64, Vec<(f64, GeneralizedSelection)>) {
+    let m = problem.machine_count as usize;
+    println!("m={} and 1/e'={}", m, problem.one_over_epsilon_prime);
+    let k_len = min(m, problem.one_over_epsilon_prime as usize);
+    // List of K_i sets with pre-computed P_pre(K_i) per set, where i+1 than the number of machines
+    let mut k: Vec<(f64, GeneralizedSelection)> = vec![(0.0, GeneralizedSelection::empty()); k_len];
+    let mut p_pre = 0.0;
+    for (c, x_c) in x_tilde
+        .configurations
+        .iter()
+        .filter(|(c, _)| c.configuration.machine_count > 0)
+    {
+        let i = c.configuration.machine_count as usize;
+        println!(
+            "{i} machines used in config {:?} which was selected {x_c}",
+            c
+        );
+        let group = i - 1;
+        p_pre += x_c;
+        k[group].0 += x_c;
+        k[group].1.push(c.clone(), *x_c);
+    }
+
+    for (_, k_i) in k.iter_mut() {
+        k_i.sort_by_resource_amount();
+    }
+
+    (p_pre, k)
 }
 
 fn assign_narrow_jobs(_x_tilde: &GeneralizedSelection, _y_tilde: &NarrowJobSelection) {
