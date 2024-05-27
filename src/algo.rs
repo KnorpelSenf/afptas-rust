@@ -943,33 +943,34 @@ fn reduce_resource_amounts(
                         x_c,
                         Rc::from(Window::empty()),
                     ),
-                    |(mut sel, curr_p, curr_w), (c, mut p)| {
-                        let new_p = curr_p - p;
-                        let mut new_w = curr_w;
-                        let is_cut = (curr_p / step_width).ceil() != (new_p / step_width).ceil();
+                    |(mut sel, p_curr, w_curr), (c, mut p)| {
+                        let p_new = p_curr - p;
+                        let mut w_new = w_curr;
+                        let is_cut = (p_curr / step_width).ceil() != (p_new / step_width).ceil();
 
                         if is_cut {
-                            let p_cut = ((curr_p / step_width).ceil() * step_width) - curr_p;
+                            let p_cut = (p_curr / step_width).ceil() * step_width;
+                            let p_diff = p_cut - p_curr;
                             sel.push(
                                 GeneralizedConfiguration {
                                     configuration: c.configuration.clone(),
-                                    window: Rc::clone(&new_w),
+                                    window: Rc::clone(&w_new),
                                 },
-                                p_cut,
+                                p_diff,
                             );
-                            new_w = c.window;
-                            p -= p_cut;
+                            w_new = c.window;
+                            p -= p_diff;
                         }
 
                         sel.push(
                             GeneralizedConfiguration {
                                 configuration: c.configuration,
-                                window: Rc::clone(&new_w),
+                                window: Rc::clone(&w_new),
                             },
                             p,
                         );
 
-                        (sel, new_p, new_w)
+                        (sel, p_new, w_new)
                     },
                 );
             sel
