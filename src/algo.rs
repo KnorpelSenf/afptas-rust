@@ -7,7 +7,6 @@ use std::{
     collections::HashMap,
     fmt::Debug,
     hash::{Hash, Hasher},
-    rc::Rc,
 };
 
 // RAW INPUT DATA
@@ -34,7 +33,7 @@ pub struct ProblemData {
     pub one_over_epsilon_prime: i32,
     pub machine_count: i32,
     pub resource_limit: f64,
-    pub jobs: Vec<Rc<Job>>,
+    pub jobs: Vec<Job>,
     pub p_max: f64,
 }
 impl ProblemData {
@@ -67,23 +66,21 @@ impl ProblemData {
             resource_limit,
             jobs: jobs
                 .into_iter()
-                .map(|job| {
-                    Rc::new(Job {
-                        id: job_ids.next().unwrap(),
-                        processing_time: job.processing_time,
-                        resource_amount: job.resource_amount,
-                    })
+                .map(|job| Job {
+                    id: job_ids.next().unwrap(),
+                    processing_time: job.processing_time,
+                    resource_amount: job.resource_amount,
                 })
                 .collect(),
             p_max,
         }
     }
-    fn is_wide(&self, job: &Rc<Job>) -> bool {
+    fn is_wide(&self, job: &Job) -> bool {
         job.resource_amount >= self.epsilon_prime * self.resource_limit
     }
 }
 
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub struct Job {
     pub id: i32,
     pub processing_time: f64,
@@ -149,7 +146,7 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
             .jobs
             .iter()
             .filter(|job| problem_data.is_wide(job))
-            .map(|job| Rc::clone(job))
+            .copied()
             .collect(),
         &problem_data,
     );
@@ -172,7 +169,7 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     }
 }
 
-fn create_i_sup(wide_jobs: Vec<Rc<Job>>, problem_data: &ProblemData) -> Vec<Rc<Job>> {
+fn create_i_sup(wide_jobs: Vec<Job>, problem_data: &ProblemData) -> Vec<Job> {
     println!("Computing I_sup from {} wide jobs", wide_jobs.len());
     let ProblemData {
         epsilon_prime_squared,
@@ -190,11 +187,11 @@ fn create_i_sup(wide_jobs: Vec<Rc<Job>>, problem_data: &ProblemData) -> Vec<Rc<J
                 .max()
                 .expect("empty group")
                 .resource_amount;
-            Rc::from(Job {
+            Job {
                 id: job_ids.next().unwrap(),
                 processing_time: step,
                 resource_amount,
-            })
+            }
         })
         .collect::<Vec<_>>();
     println!(
@@ -205,7 +202,7 @@ fn create_i_sup(wide_jobs: Vec<Rc<Job>>, problem_data: &ProblemData) -> Vec<Rc<J
     [wide_jobs, additional_jobs].concat()
 }
 
-fn linear_grouping(step: f64, jobs: &Vec<Rc<Job>>) -> Vec<Vec<Rc<Job>>> {
+fn linear_grouping(step: f64, jobs: &Vec<Job>) -> Vec<Vec<Job>> {
     let n = jobs.len();
     println!("Grouping {} jobs: {jobs:?}", n);
     // FIXME: Add special handling for the last group since we already know that
@@ -218,8 +215,8 @@ fn linear_grouping(step: f64, jobs: &Vec<Rc<Job>>) -> Vec<Vec<Rc<Job>>> {
     }
     let mut job_ids = 0..;
 
-    let mut groups: Vec<Vec<Rc<Job>>> = vec![];
-    let mut current_group: Vec<Rc<Job>> = vec![];
+    let mut groups: Vec<Vec<Job>> = vec![];
+    let mut current_group: Vec<Job> = vec![];
     let mut current_processing_time = 0.0f64;
     for job in jobs.iter() {
         let mut remaining_processing_time = job.processing_time;
@@ -233,7 +230,7 @@ fn linear_grouping(step: f64, jobs: &Vec<Rc<Job>>) -> Vec<Vec<Rc<Job>>> {
                     resource_amount: job.resource_amount,
                 };
                 current_processing_time += remaining_processing_time;
-                current_group.push(Rc::from(new_job));
+                current_group.push(new_job);
                 break;
             }
 
@@ -243,7 +240,7 @@ fn linear_grouping(step: f64, jobs: &Vec<Rc<Job>>) -> Vec<Vec<Rc<Job>>> {
                 processing_time: remaining_space,
                 resource_amount: job.resource_amount,
             };
-            current_group.push(Rc::from(new_job));
+            current_group.push(new_job);
             groups.push(current_group);
 
             current_group = vec![];
@@ -259,9 +256,9 @@ fn linear_grouping(step: f64, jobs: &Vec<Rc<Job>>) -> Vec<Vec<Rc<Job>>> {
 #[derive(Clone)]
 struct Configuration {
     /// job -> index in vector
-    index: HashMap<Rc<Job>, usize>,
+    index: HashMap<Job, usize>,
     /// job -> how many times it is contained
-    jobs: Vec<(Rc<Job>, i32)>,
+    jobs: Vec<(Job, i32)>,
     /// precomputed processing time
     processing_time: f64,
     /// precomputed resource amount
@@ -286,7 +283,7 @@ impl Configuration {
             machine_count: 0,
         }
     }
-    fn new(jobs: Vec<(Rc<Job>, i32)>) -> Self {
+    fn new(jobs: Vec<(Job, i32)>) -> Self {
         if jobs.windows(2).any(|pair| pair[0].0.id >= pair[1].0.id) {
             panic!("jobs are out of order");
         }
@@ -298,11 +295,7 @@ impl Configuration {
                     m + *count,
                 )
             });
-        let index = HashMap::from_iter(
-            jobs.iter()
-                .enumerate()
-                .map(|(i, (job, _))| (Rc::clone(job), i)),
-        );
+        let index = HashMap::from_iter(jobs.iter().enumerate().map(|(i, &(job, _))| (job, i)));
         Configuration {
             jobs,
             index,
@@ -312,7 +305,7 @@ impl Configuration {
         }
     }
     /// C(j)
-    fn job_count(&self, job: &Rc<Job>) -> i32 {
+    fn job_count(&self, job: &Job) -> i32 {
         match self.index.get(job) {
             None => 0,
             Some(i) => self.jobs.get(*i).map_or(0, |pair| pair.1),
@@ -398,7 +391,7 @@ impl Selection {
     }
 }
 
-fn f(j: &Rc<Job>, x: &Selection) -> f64 {
+fn f(j: &Job, x: &Selection) -> f64 {
     x.0.iter()
         .map(|(c, x_c)| c.job_count(j) as f64 * x_c)
         .sum::<f64>()
@@ -535,12 +528,11 @@ fn solve_block_problem_ilp(
     let wide_job_max_count = (1.0 / precision) as i32;
     let mut prob = Ilp::new(*machine_count, *resource_limit);
 
-    let variables: Vec<(Rc<Job>, Variable)> = jobs
-        .iter()
+    let variables: Vec<(Job, Variable)> = jobs
+        .into_iter()
         .zip(q.iter())
         .filter(|(_, &q)| q > 0.0)
-        .map(|(job, &q)| {
-            let job = Rc::clone(job);
+        .map(|(&job, &q)| {
             let c = ConfigurationCandidate {
                 p: job.processing_time,
                 r: job.resource_amount,
@@ -559,7 +551,7 @@ fn solve_block_problem_ilp(
 
     let solution = prob.find_configuration();
 
-    let a_star: Vec<(Rc<Job>, i32)> = variables
+    let a_star: Vec<(Job, i32)> = variables
         .into_iter()
         .map(|(job, var)| (job, solution.value(var) as i32))
         .filter(|(_, var)| *var != 0)
@@ -701,11 +693,11 @@ impl Ilp {
 }
 
 fn generalize(problem: &ProblemData, x: Selection) -> (GeneralizedSelection, NarrowJobSelection) {
-    let narrow_jobs: Vec<Rc<Job>> = problem
+    let narrow_jobs: Vec<Job> = problem
         .jobs
         .iter()
         .filter(|job| !problem.is_wide(job))
-        .map(|job| Rc::clone(job))
+        .copied()
         .collect();
     let (x_tilde, y_tilde) =
         x.0.iter()
@@ -713,20 +705,20 @@ fn generalize(problem: &ProblemData, x: Selection) -> (GeneralizedSelection, Nar
             .fold(
                 (HashMap::new(), HashMap::new()),
                 |(mut acc_x, mut acc_y), (c, c_w, x_c)| {
-                    let win = Rc::new(Window::main(problem, &c_w));
+                    let window = Window::main(problem, &c_w);
 
                     for narrow_job in narrow_jobs.iter() {
                         let nconf = NarrowJobConfiguration {
-                            narrow_job: Rc::clone(&narrow_job),
-                            window: Rc::clone(&win),
+                            narrow_job: *narrow_job,
+                            window,
                         };
                         let existing = acc_y.get(&nconf).unwrap_or(&0.0);
-                        acc_y.insert(nconf, c.job_count(&narrow_job) as f64 * x_c + existing);
+                        acc_y.insert(nconf, c.job_count(narrow_job) as f64 * x_c + existing);
                     }
 
                     let gen = GeneralizedConfiguration {
                         configuration: c_w,
-                        window: win,
+                        window,
                     };
                     let existing = acc_x.get(&gen).unwrap_or(&0.0);
                     acc_x.insert(gen, x_c + existing);
@@ -741,7 +733,7 @@ fn generalize(problem: &ProblemData, x: Selection) -> (GeneralizedSelection, Nar
     )
 }
 
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 struct Window {
     resource_amount: f64,
     machine_count: i32,
@@ -792,7 +784,7 @@ impl Debug for Window {
 #[derive(Clone)]
 struct GeneralizedConfiguration {
     configuration: Configuration,
-    window: Rc<Window>,
+    window: Window,
 }
 impl PartialEq for GeneralizedConfiguration {
     fn eq(&self, other: &Self) -> bool {
@@ -876,8 +868,8 @@ impl GeneralizedSelection {
 
 #[derive(PartialEq, Eq, Hash)]
 struct NarrowJobConfiguration {
-    narrow_job: Rc<Job>,
-    window: Rc<Window>,
+    narrow_job: Job,
+    window: Window,
 }
 impl Debug for NarrowJobConfiguration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -912,11 +904,7 @@ fn reduce_resource_amounts(
                 // - window: current window size to be added to each config
                 // - generalized selection that is a vector of all the configuration snippets
                 .fold(
-                    (
-                        GeneralizedSelection::empty(),
-                        x_c,
-                        Rc::from(Window::empty()),
-                    ),
+                    (GeneralizedSelection::empty(), x_c, Window::empty()),
                     |(mut sel, p_curr, w_curr), (c, mut p)| {
                         let p_new = p_curr - p;
                         let mut w_new = w_curr;
@@ -928,7 +916,7 @@ fn reduce_resource_amounts(
                             sel.push(
                                 GeneralizedConfiguration {
                                     configuration: c.configuration.clone(),
-                                    window: Rc::clone(&w_new),
+                                    window: w_new,
                                 },
                                 p_diff,
                             );
@@ -939,7 +927,7 @@ fn reduce_resource_amounts(
                         sel.push(
                             GeneralizedConfiguration {
                                 configuration: c.configuration,
-                                window: Rc::clone(&w_new),
+                                window: w_new,
                             },
                             p,
                         );
