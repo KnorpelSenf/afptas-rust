@@ -155,6 +155,9 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     let x = max_min(&problem_data);
     println!("Max-min solved with:");
     print_selection(job_len, machine_count, &x);
+    let x = reduce_to_basic_solution(x);
+    println!("Reduced the solution to max-min to:");
+    print_selection(job_len, machine_count, &x);
     let (x_tilde, y_tilde) = generalize(&problem_data, x);
     println!("Generalized to:");
     print_gen_selection(job_len, machine_count, resource_limit, &x_tilde);
@@ -690,6 +693,11 @@ impl Ilp {
         model.set_parameter("log", "0"); // suppress log output by solver
         model.solve().expect("no ILP solution")
     }
+}
+
+fn reduce_to_basic_solution(x: &Selection) -> Selection {
+    println!("Reducing to basic solution");
+    Selection(x.0.clone())
 }
 
 fn generalize(problem: &ProblemData, x: Selection) -> (GeneralizedSelection, NarrowJobSelection) {
