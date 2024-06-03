@@ -127,29 +127,28 @@ pub struct JobPosition {
 }
 
 pub fn compute_schedule(instance: Instance) -> Schedule {
-    println!("Computing schedule");
     let Instance {
         epsilon,
         machine_count,
         resource_limit,
         ..
     } = instance;
+    let problem_data = ProblemData::from(instance);
+    let (wide_jobs, narrow_jobs): (Vec<Job>, Vec<Job>) = problem_data
+        .jobs
+        .iter()
+        .partition(|job| problem_data.is_wide(job));
+    println!(
+        "Computing schedule from {} wide and {} narrow jobs",
+        wide_jobs.len(),
+        narrow_jobs.len()
+    );
 
     if 1.0 / epsilon >= machine_count.into() {
         todo!("second case");
     }
 
-    let problem_data = ProblemData::from(instance);
-
-    let _i_sup = create_i_sup(
-        problem_data
-            .jobs
-            .iter()
-            .filter(|job| problem_data.is_wide(job))
-            .copied()
-            .collect(),
-        &problem_data,
-    );
+    let _i_sup = create_i_sup(wide_jobs, &problem_data);
 
     let job_len = problem_data.jobs.len();
     let x = max_min(&problem_data);
