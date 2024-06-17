@@ -4,7 +4,7 @@ use good_lp::{
 };
 use std::{
     cmp::{max, min, Ordering},
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt::Debug,
     hash::{Hash, Hasher},
 };
@@ -163,8 +163,7 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     // for x in x_tilde.0.iter() {
     //     println!("{:?}", x);
     // }
-    let (_x_bar, stacks) = reduce_resource_amounts(&problem_data, &x_tilde);
-    let _y_bar = assign_narrow_jobs(stacks, &x_tilde, &y_tilde);
+    let (_x_bar, _y_bar) = reduce_resource_amounts(&problem_data, &x_tilde, &y_tilde);
 
     Schedule {
         mapping: Box::from(vec![]),
@@ -711,17 +710,18 @@ fn generalize(problem: &ProblemData, x: Selection) -> (GeneralizedSelection, Nar
         x.0.iter()
             .map(|(c, x_c)| (c, c.reduce_to_wide_jobs(problem), x_c))
             .fold(
-                (HashMap::new(), HashMap::new()),
+                (HashMap::new(), NarrowJobSelection::empty()),
                 |(mut acc_x, mut acc_y), (c, c_w, x_c)| {
                     let window = Window::main(problem, &c_w);
 
                     for narrow_job in narrow_jobs.iter() {
-                        let nconf = NarrowJobConfiguration {
-                            narrow_job: *narrow_job,
-                            window,
-                        };
-                        let existing = acc_y.get(&nconf).unwrap_or(&0.0);
-                        acc_y.insert(nconf, c.job_count(narrow_job) as f64 * x_c + existing);
+                        acc_y.add(
+                            NarrowJobConfiguration {
+                                narrow_job: *narrow_job,
+                                window,
+                            },
+                            c.job_count(narrow_job) as f64 * x_c,
+                        )
                     }
 
                     let gen = GeneralizedConfiguration {
@@ -735,10 +735,7 @@ fn generalize(problem: &ProblemData, x: Selection) -> (GeneralizedSelection, Nar
                 },
             );
 
-    (
-        GeneralizedSelection::from(x_tilde),
-        NarrowJobSelection(y_tilde),
-    )
+    (GeneralizedSelection::from(x_tilde), y_tilde)
 }
 
 #[derive(Copy, Clone)]
@@ -874,7 +871,7 @@ impl GeneralizedSelection {
     }
 }
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, Copy, Clone)]
 struct NarrowJobConfiguration {
     narrow_job: Job,
     window: Window,
@@ -888,20 +885,67 @@ impl Debug for NarrowJobConfiguration {
     }
 }
 #[derive(Debug)]
-struct NarrowJobSelection(HashMap<NarrowJobConfiguration, f64>);
+struct NarrowJobSelection {
+    processing_times: Vec<f64>,
+    index: HashMap<NarrowJobConfiguration, usize>,
+    windex: HashMap<Window, HashSet<Job>>,
+}
 impl NarrowJobSelection {
+    fn get_job_by_window(&self, window: &Window) -> Vec<(Job, f64)> {
+        let set = self.windex.get(window);
+        let window = *window;
+        if let Some(jobs) = set {
+            jobs.iter()
+                .copied()
+                .map(|job| {
+                    let config = NarrowJobConfiguration {
+                        narrow_job: job,
+                        window,
+                    };
+                    let i = *self.index.get(&config).expect(
+                        "invalid internal state of narrow jobs selection, index out of date",
+                    );
+                    let processing_time = self.processing_times[i];
+                    (job, processing_time)
+                })
+                .collect()
+        } else {
+            vec![]
+        }
+    }
+    fn add(&mut self, config: NarrowJobConfiguration, processing_time: f64) {
+        let i = *self.index.entry(config).or_insert_with(|| {
+            let len = self.processing_times.len();
+            self.processing_times.push(0.0);
+            len
+        });
+        self.processing_times[i] += processing_time;
+
+        self.windex
+            .entry(config.window)
+            .and_modify(|set| {
+                set.insert(config.narrow_job);
+            })
+            .or_insert_with(|| {
+                let mut s = HashSet::new();
+                s.insert(config.narrow_job);
+                s
+            });
+    }
+
     fn empty() -> Self {
-        NarrowJobSelection(HashMap::new())
+        NarrowJobSelection {
+            processing_times: vec![],
+            index: HashMap::new(),
+            windex: HashMap::new(),
+        }
     }
     fn merge(selections: Vec<NarrowJobSelection>) -> Self {
         selections
             .into_iter()
             .fold(NarrowJobSelection::empty(), |merged, sel| {
-                sel.0.into_iter().fold(merged, |mut acc, (config, x)| {
-                    acc.0
-                        .entry(config)
-                        .and_modify(|existing| *existing += x)
-                        .or_insert(x);
+                sel.index.into_iter().fold(merged, |mut acc, (config, i)| {
+                    acc.add(config, sel.processing_times[i]);
                     acc
                 })
             })
@@ -927,9 +971,11 @@ fn reduce_resource_amounts(
                 .configurations
                 .into_iter()
                 // fold over configs in this stack
+                // - generalized selection that is a vector of all the configuration snippets
+                // - narrow job selection that is a vector of all the narrow jobs
                 // - processing time: remaining distance to the bottom of the stack
                 // - window: current window size to be added to each config
-                // - generalized selection that is a vector of all the configuration snippets
+                // - k_ik that collects the configurations up to each cut in order to compute phi_c
                 .fold(
                     (
                         GeneralizedSelection::empty(),
@@ -938,41 +984,84 @@ fn reduce_resource_amounts(
                         Window::empty(),
                         vec![],
                     ),
-                    |(mut sel, narrow, p_curr, w_curr, mut k_ik), (c, mut p)| {
-                        let p_new = p_curr - p;
-                        let mut w_new = w_curr;
-                        let is_cut = (p_curr / step_width).ceil() != (p_new / step_width).ceil();
+                    |(mut wide_sel, mut narrow_sel, e_c, mut window, mut k_i), (c, mut p)| {
+                        let s_c = e_c - p;
+                        let cur_step = (e_c / step_width).floor();
+                        let next_step = (s_c / step_width).floor();
+                        let is_cut = cur_step != next_step;
+
+                        k_i.push(c.clone());
 
                         if is_cut {
-                            let p_cut = (p_curr / step_width).ceil() * step_width;
-                            let p_diff = p_cut - p_curr;
-                            sel.push(
+                            let lowest_cut = (s_c / step_width).ceil() * step_width;
+                            let p_w_ik: f64 = k_i
+                                .iter()
+                                .map(|k_ik| {
+                                    y_tilde.get_job_by_window(&k_ik.window).iter().for_each(
+                                        |(narrow_job, amount)| {
+                                            narrow_sel.add(
+                                                NarrowJobConfiguration {
+                                                    narrow_job: *narrow_job,
+                                                    window,
+                                                },
+                                                *amount,
+                                            );
+                                        },
+                                    );
+
+                                    k_ik.configuration.processing_time
+                                })
+                                .sum();
+
+                            let w_down = e_c - lowest_cut;
+                            let phi_down = w_down / p_w_ik;
+                            let phi_up = 1.0 - phi_down;
+                            let next_window = c.window;
+
+                            y_tilde.get_job_by_window(&window).iter().for_each(
+                                |(narrow_job, amount)| {
+                                    narrow_sel.add(
+                                        NarrowJobConfiguration {
+                                            narrow_job: *narrow_job,
+                                            window,
+                                        },
+                                        *amount * phi_up,
+                                    );
+                                    // TODO this also has to happen for the last window (R,m)
+                                    narrow_sel.add(
+                                        NarrowJobConfiguration {
+                                            narrow_job: *narrow_job,
+                                            window: next_window,
+                                        },
+                                        *amount * phi_down,
+                                    );
+                                },
+                            );
+
+                            let highest_cut = cur_step * step_width;
+                            // todo potential bug, but maybe im just dumb
+                            let p_diff = highest_cut - e_c;
+                            wide_sel.push(
                                 GeneralizedConfiguration {
                                     configuration: c.configuration.clone(),
-                                    window: w_new,
+                                    window,
                                 },
                                 p_diff,
                             );
 
-                            // Wir brauchen für phi_c alle Windows, die schon im
-                            // main window stecken. Für k_ik sammeln wir
-                            // Configurations bis zum Cut. Dann müssen wir statt
-                            // des obersten den untersten Cut berechnen. Und
-                            // dann folgen wir einfach der Anleitung.
-
-                            w_new = c.window;
+                            window = next_window;
                             p -= p_diff;
                         }
 
-                        sel.push(
+                        wide_sel.push(
                             GeneralizedConfiguration {
                                 configuration: c.configuration,
-                                window: w_new,
+                                window,
                             },
                             p,
                         );
 
-                        (sel, narrow, p_new, w_new, k_ik)
+                        (wide_sel, narrow_sel, s_c, window, k_i)
                     },
                 );
             (sel, narrow)
