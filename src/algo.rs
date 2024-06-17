@@ -163,8 +163,8 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     // for x in x_tilde.0.iter() {
     //     println!("{:?}", x);
     // }
-    let _x_bar = reduce_resource_amounts(&problem_data, &x_tilde);
-    let _y_bar = assign_narrow_jobs(&x_tilde, &y_tilde);
+    let (_x_bar, stacks) = reduce_resource_amounts(&problem_data, &x_tilde);
+    let _y_bar = assign_narrow_jobs(stacks, &x_tilde, &y_tilde);
 
     Schedule {
         mapping: Box::from(vec![]),
@@ -889,11 +889,30 @@ impl Debug for NarrowJobConfiguration {
 }
 #[derive(Debug)]
 struct NarrowJobSelection(HashMap<NarrowJobConfiguration, f64>);
+impl NarrowJobSelection {
+    fn empty() -> Self {
+        NarrowJobSelection(HashMap::new())
+    }
+    fn merge(selections: Vec<NarrowJobSelection>) -> Self {
+        selections
+            .into_iter()
+            .fold(NarrowJobSelection::empty(), |merged, sel| {
+                sel.0.into_iter().fold(merged, |mut acc, (config, x)| {
+                    acc.0
+                        .entry(config)
+                        .and_modify(|existing| *existing += x)
+                        .or_insert(x);
+                    acc
+                })
+            })
+    }
+}
 
 fn reduce_resource_amounts(
     problem: &ProblemData,
     x_tilde: &GeneralizedSelection,
-) -> GeneralizedSelection {
+    y_tilde: &NarrowJobSelection,
+) -> (GeneralizedSelection, NarrowJobSelection) {
     println!("Reducing resource amounts");
     let (p_pre, k) = group_by_machine_count(problem, x_tilde);
 
@@ -901,10 +920,10 @@ fn reduce_resource_amounts(
     let step_width = problem.epsilon_prime_squared * p_pre;
     println!("Step width is {step_width}");
 
-    let stacks: Vec<GeneralizedSelection> = k
+    let (stacks, narrow_jobs): (Vec<GeneralizedSelection>, Vec<NarrowJobSelection>) = k
         .into_iter()
         .map(|(x_c, k_i)| {
-            let (sel, _, _) = k_i
+            let (sel, narrow, _, _, _) = k_i
                 .configurations
                 .into_iter()
                 // fold over configs in this stack
@@ -912,8 +931,14 @@ fn reduce_resource_amounts(
                 // - window: current window size to be added to each config
                 // - generalized selection that is a vector of all the configuration snippets
                 .fold(
-                    (GeneralizedSelection::empty(), x_c, Window::empty()),
-                    |(mut sel, p_curr, w_curr), (c, mut p)| {
+                    (
+                        GeneralizedSelection::empty(),
+                        NarrowJobSelection::empty(),
+                        x_c,
+                        Window::empty(),
+                        vec![],
+                    ),
+                    |(mut sel, narrow, p_curr, w_curr, mut k_ik), (c, mut p)| {
                         let p_new = p_curr - p;
                         let mut w_new = w_curr;
                         let is_cut = (p_curr / step_width).ceil() != (p_new / step_width).ceil();
@@ -928,6 +953,13 @@ fn reduce_resource_amounts(
                                 },
                                 p_diff,
                             );
+
+                            // Wir brauchen für phi_c alle Windows, die schon im
+                            // main window stecken. Für k_ik sammeln wir
+                            // Configurations bis zum Cut. Dann müssen wir statt
+                            // des obersten den untersten Cut berechnen. Und
+                            // dann folgen wir einfach der Anleitung.
+
                             w_new = c.window;
                             p -= p_diff;
                         }
@@ -940,12 +972,12 @@ fn reduce_resource_amounts(
                             p,
                         );
 
-                        (sel, p_new, w_new)
+                        (sel, narrow, p_new, w_new, k_ik)
                     },
                 );
-            sel
+            (sel, narrow)
         })
-        .collect();
+        .unzip();
 
     for (i, stack) in stacks.iter().enumerate() {
         println!("  --- K_{} ---  ", i + 1);
@@ -954,7 +986,10 @@ fn reduce_resource_amounts(
         }
     }
 
-    GeneralizedSelection::merge(stacks)
+    (
+        GeneralizedSelection::merge(stacks),
+        NarrowJobSelection::merge(narrow_jobs),
+    )
 }
 
 fn group_by_machine_count(
@@ -990,16 +1025,22 @@ fn group_by_machine_count(
     (p_pre, k)
 }
 
-fn assign_narrow_jobs(_x_tilde: &GeneralizedSelection, _y_tilde: &NarrowJobSelection) {
-    // TODO: fix the above FIXME and base the following impl on the above one
-    // for x_tilde
-
+fn assign_narrow_jobs(
+    stacks: Vec<GeneralizedSelection>,
+    x_tilde: &GeneralizedSelection,
+    y_tilde: &NarrowJobSelection,
+) -> NarrowJobSelection {
     // See page 1534 left bottom
     // for job j in narrow_jobs
     //   for config c in K_(i,k+1) # configurations between C(i,k) and C(i,k+1)
     //     y_bar_(j,w_(i,k)) += P_pre(C)/P_pre(w(C)) * y_tilde_(j,w(C))
 
-    // do the things on page 1534 right top
+    let y_bar = NarrowJobSelection::empty();
+    for stack in stacks {
+        for c in stack.configurations {
+            let w = c.0.window;
+        }
+    }
 
-    // return y_bar
+    y_bar
 }
