@@ -886,7 +886,7 @@ impl Debug for NarrowJobConfiguration {
 }
 #[derive(Debug)]
 struct NarrowJobSelection {
-    index: HashMap<NarrowJobConfiguration, f64>,
+    processing_times: HashMap<NarrowJobConfiguration, f64>,
     windex: HashMap<Window, HashSet<Job>>,
 }
 impl NarrowJobSelection {
@@ -901,7 +901,7 @@ impl NarrowJobSelection {
                         narrow_job: job,
                         window,
                     };
-                    let processing_time = *self.index.get(&config).expect(
+                    let processing_time = *self.processing_times.get(&config).expect(
                         "invalid internal state of narrow jobs selection, index out of date",
                     );
                     (job, processing_time)
@@ -912,7 +912,7 @@ impl NarrowJobSelection {
         }
     }
     fn add(&mut self, config: NarrowJobConfiguration, processing_time: f64) {
-        self.index.insert(config, processing_time);
+        self.processing_times.insert(config, processing_time);
         self.windex
             .entry(config.window)
             .and_modify(|set| {
@@ -927,7 +927,7 @@ impl NarrowJobSelection {
 
     fn empty() -> Self {
         NarrowJobSelection {
-            index: HashMap::new(),
+            processing_times: HashMap::new(),
             windex: HashMap::new(),
         }
     }
@@ -935,12 +935,13 @@ impl NarrowJobSelection {
         selections
             .into_iter()
             .fold(NarrowJobSelection::empty(), |merged, sel| {
-                sel.index
-                    .into_iter()
-                    .fold(merged, |mut acc, (config, processing_time)| {
+                sel.processing_times.into_iter().fold(
+                    merged,
+                    |mut acc, (config, processing_time)| {
                         acc.add(config, processing_time);
                         acc
-                    })
+                    },
+                )
             })
     }
 }
