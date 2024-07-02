@@ -145,6 +145,8 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     );
 
     if 1.0 / epsilon >= machine_count.into() {
+        // TODO: this is the same algorithm but we have to set a flag in
+        // problem_data that all jobs are considered wide jobs
         todo!("second case");
     }
 
@@ -1071,6 +1073,8 @@ fn reduce_resource_amounts(
             println!("{:?}: {}", config, x_c);
         }
     }
+
+    // TODO: x_bar(emptyset, (R,m)) = x_tilde(emptyset, (R,m)) + epsilon_prime * P_pre
 
     (
         GeneralizedSelection::merge(stacks),
