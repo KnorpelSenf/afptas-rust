@@ -1009,6 +1009,7 @@ fn reduce_resource_amounts(
                                     k_ik.configuration.processing_time
                                 })
                                 .sum();
+                            k_i = vec![];
 
                             let w_down = e_c - lowest_cut;
                             let phi_down = w_down / p_w_ik;
