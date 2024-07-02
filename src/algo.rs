@@ -1037,8 +1037,7 @@ fn reduce_resource_amounts(
                             );
 
                             let highest_cut = cur_step * step_width;
-                            // todo potential bug, but maybe im just dumb
-                            let p_diff = highest_cut - e_c;
+                            let p_diff = e_c - highest_cut;
                             wide_sel.push(
                                 GeneralizedConfiguration {
                                     configuration: c.configuration.clone(),
