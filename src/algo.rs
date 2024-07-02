@@ -912,7 +912,10 @@ impl NarrowJobSelection {
         }
     }
     fn add(&mut self, config: NarrowJobConfiguration, processing_time: f64) {
-        self.processing_times.insert(config, processing_time);
+        self.processing_times
+            .entry(config)
+            .and_modify(|old| *old += processing_time)
+            .or_insert(processing_time);
         self.windex
             .entry(config.window)
             .and_modify(|set| {
