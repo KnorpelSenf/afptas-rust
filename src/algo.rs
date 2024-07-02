@@ -886,12 +886,11 @@ impl Debug for NarrowJobConfiguration {
 }
 #[derive(Debug)]
 struct NarrowJobSelection {
-    processing_times: Vec<f64>,
-    index: HashMap<NarrowJobConfiguration, usize>,
+    index: HashMap<NarrowJobConfiguration, f64>,
     windex: HashMap<Window, HashSet<Job>>,
 }
 impl NarrowJobSelection {
-    fn get_job_by_window(&self, window: &Window) -> Vec<(Job, f64)> {
+    fn get_jobs_by_window(&self, window: &Window) -> Vec<(Job, f64)> {
         let set = self.windex.get(window);
         let window = *window;
         if let Some(jobs) = set {
@@ -902,10 +901,9 @@ impl NarrowJobSelection {
                         narrow_job: job,
                         window,
                     };
-                    let i = *self.index.get(&config).expect(
+                    let processing_time = *self.index.get(&config).expect(
                         "invalid internal state of narrow jobs selection, index out of date",
                     );
-                    let processing_time = self.processing_times[i];
                     (job, processing_time)
                 })
                 .collect()
@@ -914,13 +912,7 @@ impl NarrowJobSelection {
         }
     }
     fn add(&mut self, config: NarrowJobConfiguration, processing_time: f64) {
-        let i = *self.index.entry(config).or_insert_with(|| {
-            let len = self.processing_times.len();
-            self.processing_times.push(0.0);
-            len
-        });
-        self.processing_times[i] += processing_time;
-
+        self.index.insert(config, processing_time);
         self.windex
             .entry(config.window)
             .and_modify(|set| {
@@ -935,7 +927,6 @@ impl NarrowJobSelection {
 
     fn empty() -> Self {
         NarrowJobSelection {
-            processing_times: vec![],
             index: HashMap::new(),
             windex: HashMap::new(),
         }
@@ -944,10 +935,12 @@ impl NarrowJobSelection {
         selections
             .into_iter()
             .fold(NarrowJobSelection::empty(), |merged, sel| {
-                sel.index.into_iter().fold(merged, |mut acc, (config, i)| {
-                    acc.add(config, sel.processing_times[i]);
-                    acc
-                })
+                sel.index
+                    .into_iter()
+                    .fold(merged, |mut acc, (config, processing_time)| {
+                        acc.add(config, processing_time);
+                        acc
+                    })
             })
     }
 }
@@ -997,7 +990,7 @@ fn reduce_resource_amounts(
                             let p_w_ik: f64 = k_i
                                 .iter()
                                 .map(|k_ik| {
-                                    y_tilde.get_job_by_window(&k_ik.window).iter().for_each(
+                                    y_tilde.get_jobs_by_window(&k_ik.window).iter().for_each(
                                         |(narrow_job, amount)| {
                                             narrow_sel.add(
                                                 NarrowJobConfiguration {
@@ -1018,7 +1011,7 @@ fn reduce_resource_amounts(
                             let phi_up = 1.0 - phi_down;
                             let next_window = c.window;
 
-                            y_tilde.get_job_by_window(&window).iter().for_each(
+                            y_tilde.get_jobs_by_window(&window).iter().for_each(
                                 |(narrow_job, amount)| {
                                     narrow_sel.add(
                                         NarrowJobConfiguration {
