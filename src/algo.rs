@@ -1113,23 +1113,3 @@ fn group_by_machine_count(
 
     (p_pre, k)
 }
-
-fn assign_narrow_jobs(
-    stacks: Vec<GeneralizedSelection>,
-    x_tilde: &GeneralizedSelection,
-    y_tilde: &NarrowJobSelection,
-) -> NarrowJobSelection {
-    // See page 1534 left bottom
-    // for job j in narrow_jobs
-    //   for config c in K_(i,k+1) # configurations between C(i,k) and C(i,k+1)
-    //     y_bar_(j,w_(i,k)) += P_pre(C)/P_pre(w(C)) * y_tilde_(j,w(C))
-
-    let y_bar = NarrowJobSelection::empty();
-    for stack in stacks {
-        for c in stack.configurations {
-            let w = c.0.window;
-        }
-    }
-
-    y_bar
-}
