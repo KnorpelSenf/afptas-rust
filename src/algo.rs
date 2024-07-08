@@ -7,6 +7,7 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
     hash::{Hash, Hasher},
+    vec,
 };
 
 // RAW INPUT DATA
@@ -117,13 +118,12 @@ impl Hash for Job {
 
 #[derive(Debug)]
 pub struct Schedule {
-    pub mapping: Box<Vec<JobPosition>>,
+    pub mapping: Vec<MachineSchedule>,
 }
 
 #[derive(Debug)]
-pub struct JobPosition {
-    pub machine: i32,
-    pub starting_time: f64,
+pub struct MachineSchedule {
+    pub jobs: Vec<Job>,
 }
 
 pub fn compute_schedule(instance: Instance) -> Schedule {
@@ -167,9 +167,7 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     // }
     let (_x_bar, _y_bar) = reduce_resource_amounts(&problem_data, &x_tilde, &y_tilde);
 
-    Schedule {
-        mapping: Box::from(vec![]),
-    }
+    Schedule { mapping: vec![] }
 }
 
 fn create_i_sup(wide_jobs: Vec<Job>, problem_data: &ProblemData) -> Vec<Job> {
