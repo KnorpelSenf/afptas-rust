@@ -26,16 +26,19 @@ pub struct InstanceJob {
 
 // WORKING DATA
 #[derive(Debug, Clone)]
-pub struct ProblemData {
-    pub epsilon: f64,
-    pub epsilon_squared: f64,
-    pub epsilon_prime: f64,
-    pub epsilon_prime_squared: f64,
-    pub one_over_epsilon_prime: i32,
-    pub machine_count: i32,
-    pub resource_limit: f64,
-    pub jobs: Vec<Job>,
-    pub p_max: f64,
+struct ProblemData {
+    epsilon: f64,
+    epsilon_squared: f64,
+    epsilon_prime: f64,
+    epsilon_prime_squared: f64,
+    one_over_epsilon_prime: i32,
+    machine_count: i32,
+    resource_limit: f64,
+    jobs: Vec<Job>,
+    p_max: f64,
+
+    epsilon_prime_times_resource_limit: f64,
+    second_case: bool,
 }
 impl ProblemData {
     fn from(instance: Instance) -> Self {
@@ -74,10 +77,13 @@ impl ProblemData {
                 })
                 .collect(),
             p_max,
+
+            epsilon_prime_times_resource_limit: epsilon_prime * resource_limit,
+            second_case: 1.0 / epsilon >= machine_count.into(),
         }
     }
     fn is_wide(&self, job: &Job) -> bool {
-        job.resource_amount >= self.epsilon_prime * self.resource_limit
+        self.second_case || job.resource_amount >= self.epsilon_prime_times_resource_limit
     }
 }
 
@@ -128,7 +134,6 @@ pub struct MachineSchedule {
 
 pub fn compute_schedule(instance: Instance) -> Schedule {
     let Instance {
-        epsilon,
         machine_count,
         resource_limit,
         ..
@@ -143,12 +148,6 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
         wide_jobs.len(),
         narrow_jobs.len()
     );
-
-    if 1.0 / epsilon >= machine_count.into() {
-        // TODO: this is the same algorithm but we have to set a flag in
-        // problem_data that all jobs are considered wide jobs
-        todo!("second case");
-    }
 
     let _i_sup = create_i_sup(wide_jobs, &problem_data);
 
