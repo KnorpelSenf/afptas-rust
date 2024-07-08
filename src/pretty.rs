@@ -2,7 +2,6 @@ use crate::algo::Schedule;
 
 use std::{cmp::max, iter::repeat};
 
-const PRECISION: i32 = 8;
 const TICK: f64 = 0.5;
 
 pub fn pretty(schedule: Schedule) -> String {
@@ -11,7 +10,6 @@ pub fn pretty(schedule: Schedule) -> String {
         return String::from("<empty schedule>");
     }
     let job_count: usize = schedule.mapping.iter().map(|s| s.jobs.len()).sum();
-    
     let label_width = (max(job_count, machine_count) - 1).to_string().len();
     let column_width = 2 + label_width;
     let mut columns: Vec<_> = schedule
