@@ -10,6 +10,8 @@ use std::{
     vec,
 };
 
+const FLOATING_TOLERANCE: f64 = 0.01;
+
 // RAW INPUT DATA
 #[derive(Debug)]
 pub struct Instance {
@@ -164,7 +166,13 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     // for x in x_tilde.0.iter() {
     //     println!("{:?}", x);
     // }
-    let (_x_bar, _y_bar) = reduce_resource_amounts(&problem_data, &x_tilde, &y_tilde);
+    let (x_bar, y_bar) = reduce_resource_amounts(&problem_data, &x_tilde, &y_tilde);
+    println!("{:#?}", x_bar.configurations);
+    println!("{:#?}", y_bar.processing_times);
+
+    let (x_hat, y_hat) = integral_schedule(&problem_data, x_bar, y_bar);
+    println!("{:#?}", x_hat.configurations);
+    println!("{:#?}", y_hat.processing_times);
 
     Schedule { mapping: vec![] }
 }
@@ -761,6 +769,12 @@ impl Window {
             machine_count,
         }
     }
+    fn full(problem: &ProblemData) -> Self {
+        Window {
+            machine_count: problem.machine_count,
+            resource_amount: problem.resource_limit,
+        }
+    }
 }
 impl PartialEq for Window {
     fn eq(&self, other: &Self) -> bool {
@@ -789,6 +803,14 @@ impl Debug for Window {
 struct GeneralizedConfiguration {
     configuration: Configuration,
     window: Window,
+}
+impl GeneralizedConfiguration {
+    fn empty(problem: &ProblemData) -> Self {
+        GeneralizedConfiguration {
+            configuration: Configuration::empty(),
+            window: Window::full(problem),
+        }
+    }
 }
 impl PartialEq for GeneralizedConfiguration {
     fn eq(&self, other: &Self) -> bool {
@@ -1024,7 +1046,8 @@ fn reduce_resource_amounts(
                                         },
                                         *amount * phi_up,
                                     );
-                                    // TODO this also has to happen for the last window (R,m)
+                                    // TODO: this also has to happen for the last window (R,m), which should be
+                                    // x_bar(emptyset, (R,m)) = x_tilde(emptyset, (R,m)) + epsilon_prime * P_pre
                                     narrow_sel.add(
                                         NarrowJobConfiguration {
                                             narrow_job: *narrow_job,
@@ -1071,8 +1094,6 @@ fn reduce_resource_amounts(
         }
     }
 
-    // TODO: x_bar(emptyset, (R,m)) = x_tilde(emptyset, (R,m)) + epsilon_prime * P_pre
-
     (
         GeneralizedSelection::merge(stacks),
         NarrowJobSelection::merge(narrow_jobs),
@@ -1110,4 +1131,52 @@ fn group_by_machine_count(
     }
 
     (p_pre, k)
+}
+
+fn integral_schedule(
+    problem: &ProblemData,
+    x_bar: GeneralizedSelection,
+    y_bar: NarrowJobSelection,
+) -> (GeneralizedSelection, NarrowJobSelection) {
+    let mut x_hat = GeneralizedSelection {
+        configurations: x_bar
+            .configurations
+            .into_iter()
+            .map(|(c, x_c)| (c, x_c + problem.p_max))
+            .collect(),
+    };
+
+    let (y_hat, y_hat_fractional): (Vec<_>, Vec<_>) = y_bar
+        .processing_times
+        .into_iter()
+        .partition(|(c, x_c)| c.narrow_job.processing_time - x_c < FLOATING_TOLERANCE);
+    x_hat.push(
+        GeneralizedConfiguration::empty(problem),
+        y_hat_fractional.iter().map(|(_, x_c)| x_c).sum(),
+    );
+    let mut y_hat = y_hat
+        .into_iter()
+        .fold(NarrowJobSelection::empty(), |mut sel, (c, x_c)| {
+            sel.add(c, x_c);
+            sel
+        });
+    let full_window = Window::full(problem);
+    for (c, x_c) in y_hat_fractional {
+        y_hat.add(
+            NarrowJobConfiguration {
+                narrow_job: c.narrow_job,
+                window: full_window,
+            },
+            x_c,
+        );
+    }
+
+    x_hat.configurations.sort_by(|c0, c1| {
+        c0.0.window
+            .resource_amount
+            .partial_cmp(&c1.0.window.resource_amount)
+            .expect("bad resource amount, cannot compare")
+    });
+
+    (x_hat, y_hat)
 }
