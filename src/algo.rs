@@ -10,7 +10,7 @@ use std::{
     vec,
 };
 
-const FLOATING_TOLERANCE: f64 = 0.01;
+// const FLOATING_TOLERANCE: f64 = 0.01;
 
 // RAW INPUT DATA
 #[derive(Debug)]
@@ -124,14 +124,32 @@ impl Hash for Job {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Schedule {
     pub mapping: Vec<MachineSchedule>,
 }
+impl Schedule {
+    fn empty(machine_count: usize) -> Self {
+        Schedule {
+            mapping: vec![MachineSchedule::empty(); machine_count],
+        }
+    }
+    fn add(&mut self, machine: usize, job: Job) {
+        self.mapping[machine].push(job)
+    }
+}
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MachineSchedule {
     pub jobs: Vec<Job>,
+}
+impl MachineSchedule {
+    fn empty() -> Self {
+        MachineSchedule { jobs: vec![] }
+    }
+    fn push(&mut self, job: Job) {
+        self.jobs.push(job)
+    }
 }
 
 pub fn compute_schedule(instance: Instance) -> Schedule {
@@ -151,7 +169,7 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
         narrow_jobs.len()
     );
 
-    let _i_sup = create_i_sup(wide_jobs, &problem_data);
+    let (groups, _i_sup) = create_i_sup(wide_jobs, &problem_data);
 
     let job_len = problem_data.jobs.len();
     let x = max_min(&problem_data);
@@ -170,14 +188,10 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     println!("{:#?}", x_bar.configurations);
     println!("{:#?}", y_bar.processing_times);
 
-    let (x_hat, y_hat) = integral_schedule(&problem_data, x_bar, y_bar);
-    println!("{:#?}", x_hat.configurations);
-    println!("{:#?}", y_hat.processing_times);
-
-    Schedule { mapping: vec![] }
+    integral_schedule(&problem_data, groups, x_bar, y_bar)
 }
 
-fn create_i_sup(wide_jobs: Vec<Job>, problem_data: &ProblemData) -> Vec<Job> {
+fn create_i_sup(wide_jobs: Vec<Job>, problem_data: &ProblemData) -> (Vec<Vec<Job>>, Vec<Job>) {
     println!("Computing I_sup from {} wide jobs", wide_jobs.len());
     let ProblemData {
         epsilon_prime_squared,
@@ -185,16 +199,12 @@ fn create_i_sup(wide_jobs: Vec<Job>, problem_data: &ProblemData) -> Vec<Job> {
     } = problem_data;
     let p_w: f64 = wide_jobs.iter().map(|job| job.processing_time).sum();
     let step = epsilon_prime_squared * p_w;
-    let mut job_ids = (wide_jobs.last().expect("last job").id + 1)..;
+    let mut job_ids = (wide_jobs.last().expect("no jobs").id + 1)..;
     let groups = linear_grouping(step, &wide_jobs);
     let additional_jobs = groups
-        .into_iter()
+        .iter()
         .map(|group| {
-            let resource_amount = group
-                .into_iter()
-                .max()
-                .expect("empty group")
-                .resource_amount;
+            let resource_amount = group.iter().max().expect("empty group").resource_amount;
             Job {
                 id: job_ids.next().unwrap(),
                 processing_time: step,
@@ -207,7 +217,7 @@ fn create_i_sup(wide_jobs: Vec<Job>, problem_data: &ProblemData) -> Vec<Job> {
         additional_jobs.len(),
         wide_jobs.len() + additional_jobs.len(),
     );
-    [wide_jobs, additional_jobs].concat()
+    (groups, [wide_jobs, additional_jobs].concat())
 }
 
 fn linear_grouping(step: f64, jobs: &Vec<Job>) -> Vec<Vec<Job>> {
@@ -1133,11 +1143,52 @@ fn group_by_machine_count(
     (p_pre, k)
 }
 
+struct Grouping {
+    group_size: f64,
+    groups: Vec<(usize, Vec<Job>)>,
+}
+impl Grouping {
+    fn new(problem: &ProblemData, groups: Vec<Vec<Job>>) -> Self {
+        Grouping {
+            group_size: problem.one_over_epsilon_prime as f64,
+            groups: groups.into_iter().map(|group| (0, group)).collect(),
+        }
+    }
+    fn next(mut self, job: Job) -> Job {
+        let i = (job.resource_amount % self.group_size) as usize;
+        let res = self.groups[i].1[self.groups[i].0];
+        self.groups[i].0 += 1;
+        res
+    }
+}
+
+fn group_by_resource_amount(problem: &ProblemData) -> Grouping {
+    let ProblemData {
+        ref jobs,
+        epsilon_prime_squared,
+        ..
+    } = *problem;
+
+    let group_size = epsilon_prime_squared as f64;
+    let len = 1.0 / group_size;
+    let mut groups: Vec<Vec<Job>> = vec![vec![]; len as usize];
+    for job in jobs.iter().copied() {
+        let r = job.resource_amount;
+        let i = r % group_size;
+        groups[i as usize].push(job)
+    }
+
+    Grouping::new(problem, groups)
+}
+
 fn integral_schedule(
     problem: &ProblemData,
+    groups: Vec<Vec<Job>>,
     x_bar: GeneralizedSelection,
     y_bar: NarrowJobSelection,
-) -> (GeneralizedSelection, NarrowJobSelection) {
+) -> Schedule {
+    let s = Schedule::empty(problem.machine_count as usize);
+
     let mut x_hat = GeneralizedSelection {
         configurations: x_bar
             .configurations
@@ -1146,30 +1197,30 @@ fn integral_schedule(
             .collect(),
     };
 
-    let (y_hat, y_hat_fractional): (Vec<_>, Vec<_>) = y_bar
-        .processing_times
-        .into_iter()
-        .partition(|(c, x_c)| c.narrow_job.processing_time - x_c < FLOATING_TOLERANCE);
-    x_hat.push(
-        GeneralizedConfiguration::empty(problem),
-        y_hat_fractional.iter().map(|(_, x_c)| x_c).sum(),
-    );
-    let mut y_hat = y_hat
-        .into_iter()
-        .fold(NarrowJobSelection::empty(), |mut sel, (c, x_c)| {
-            sel.add(c, x_c);
-            sel
-        });
-    let full_window = Window::full(problem);
-    for (c, x_c) in y_hat_fractional {
-        y_hat.add(
-            NarrowJobConfiguration {
-                narrow_job: c.narrow_job,
-                window: full_window,
-            },
-            x_c,
-        );
-    }
+    // let (y_hat, y_hat_fractional): (Vec<_>, Vec<_>) = y_bar
+    //     .processing_times
+    //     .into_iter()
+    //     .partition(|(c, x_c)| c.narrow_job.processing_time - x_c < FLOATING_TOLERANCE);
+    // x_hat.push(
+    //     GeneralizedConfiguration::empty(problem),
+    //     y_hat_fractional.iter().map(|(_, x_c)| x_c).sum(),
+    // );
+    // let mut y_hat = y_hat
+    //     .into_iter()
+    //     .fold(NarrowJobSelection::empty(), |mut sel, (c, x_c)| {
+    //         sel.add(c, x_c);
+    //         sel
+    //     });
+    // let full_window = Window::full(problem);
+    // for (c, x_c) in y_hat_fractional {
+    //     y_hat.add(
+    //         NarrowJobConfiguration {
+    //             narrow_job: c.narrow_job,
+    //             window: full_window,
+    //         },
+    //         x_c,
+    //     );
+    // }
 
     x_hat.configurations.sort_by(|c0, c1| {
         c0.0.window
@@ -1178,5 +1229,12 @@ fn integral_schedule(
             .expect("bad resource amount, cannot compare")
     });
 
-    (x_hat, y_hat)
+    let _groups = group_by_resource_amount(problem);
+    // 2. iterate over solution vector x_hat
+    // 3. put corresponding jobs in the schedule
+    // 4. iterate over solution vector x_bar
+    // 5. put corresponding jobs in the schedule
+    // 6. done
+
+    s
 }
