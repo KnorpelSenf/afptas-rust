@@ -157,7 +157,7 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     let x = max_min(&problem_data);
     println!("Max-min solved with:");
     print_selection(job_len, machine_count, &x);
-    let x = reduce_to_basic_solution(&x);
+    let x = reduce_to_basic_solution(x);
     println!("Reduced the solution to max-min to:");
     print_selection(job_len, machine_count, &x);
     let (x_tilde, y_tilde) = generalize(&problem_data, x);
@@ -700,10 +700,10 @@ impl Ilp {
     }
 }
 
-fn reduce_to_basic_solution(x: &Selection) -> Selection {
+fn reduce_to_basic_solution(x: Selection) -> Selection {
     println!("Reducing to basic solution");
     // TODO: implement
-    Selection(x.0.clone())
+    x
 }
 
 fn generalize(problem: &ProblemData, x: Selection) -> (GeneralizedSelection, NarrowJobSelection) {
