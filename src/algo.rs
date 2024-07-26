@@ -7,6 +7,7 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
     hash::{Hash, Hasher},
+    iter::repeat,
     vec,
 };
 
@@ -169,8 +170,6 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
         narrow_jobs.len()
     );
 
-    let (groups, _i_sup) = create_i_sup(wide_jobs, &problem_data);
-
     let job_len = problem_data.jobs.len();
     let x = max_min(&problem_data);
     println!("Max-min solved with:");
@@ -188,88 +187,88 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     println!("{:#?}", x_bar.configurations);
     println!("{:#?}", y_bar.processing_times);
 
-    integral_schedule(&problem_data, groups, x_bar, y_bar)
+    integral_schedule(&problem_data, x_bar, y_bar)
 }
 
-fn create_i_sup(wide_jobs: Vec<Job>, problem_data: &ProblemData) -> (Vec<Vec<Job>>, Vec<Job>) {
-    println!("Computing I_sup from {} wide jobs", wide_jobs.len());
-    let ProblemData {
-        epsilon_prime_squared,
-        ..
-    } = problem_data;
-    let p_w: f64 = wide_jobs.iter().map(|job| job.processing_time).sum();
-    let step = epsilon_prime_squared * p_w;
-    let mut job_ids = (wide_jobs.last().expect("no jobs").id + 1)..;
-    let groups = linear_grouping(step, &wide_jobs);
-    let additional_jobs = groups
-        .iter()
-        .map(|group| {
-            let resource_amount = group.iter().max().expect("empty group").resource_amount;
-            Job {
-                id: job_ids.next().unwrap(),
-                processing_time: step,
-                resource_amount,
-            }
-        })
-        .collect::<Vec<_>>();
-    println!(
-        "Obtained I_sup with {} additional jobs, totalling {} jobs",
-        additional_jobs.len(),
-        wide_jobs.len() + additional_jobs.len(),
-    );
-    (groups, [wide_jobs, additional_jobs].concat())
-}
+// fn create_i_sup(wide_jobs: Vec<Job>, problem_data: &ProblemData) -> (Vec<Vec<Job>>, Vec<Job>) {
+//     println!("Computing I_sup from {} wide jobs", wide_jobs.len());
+//     let ProblemData {
+//         epsilon_prime_squared,
+//         ..
+//     } = problem_data;
+//     let p_w: f64 = wide_jobs.iter().map(|job| job.processing_time).sum();
+//     let step = epsilon_prime_squared * p_w;
+//     let mut job_ids = (wide_jobs.last().expect("no jobs").id + 1)..;
+//     let groups = linear_grouping(step, &wide_jobs);
+//     let additional_jobs = groups
+//         .iter()
+//         .map(|group| {
+//             let resource_amount = group.iter().max().expect("empty group").resource_amount;
+//             Job {
+//                 id: job_ids.next().unwrap(),
+//                 processing_time: step,
+//                 resource_amount,
+//             }
+//         })
+//         .collect::<Vec<_>>();
+//     println!(
+//         "Obtained I_sup with {} additional jobs, totalling {} jobs",
+//         additional_jobs.len(),
+//         wide_jobs.len() + additional_jobs.len(),
+//     );
+//     (groups, [wide_jobs, additional_jobs].concat())
+// }
 
-fn linear_grouping(step: f64, jobs: &Vec<Job>) -> Vec<Vec<Job>> {
-    let n = jobs.len();
-    println!("Grouping {} jobs: {jobs:?}", n);
-    // FIXME: Add special handling for the last group since we already know that
-    // all remaining jobs will be put into it. Due to floating point
-    // imprecision, it might happen that we accidentally open one group to many,
-    // containing a single job only, having the size of the floating point
-    // rounding error.
-    if n == 0 {
-        return vec![];
-    }
-    let mut job_ids = 0..;
+// fn linear_grouping(step: f64, jobs: &Vec<Job>) -> Vec<Vec<Job>> {
+//     let n = jobs.len();
+//     println!("Grouping {} jobs: {jobs:?}", n);
+//     // FIXME: Add special handling for the last group since we already know that
+//     // all remaining jobs will be put into it. Due to floating point
+//     // imprecision, it might happen that we accidentally open one group to many,
+//     // containing a single job only, having the size of the floating point
+//     // rounding error.
+//     if n == 0 {
+//         return vec![];
+//     }
+//     let mut job_ids = 0..;
 
-    let mut groups: Vec<Vec<Job>> = vec![];
-    let mut current_group: Vec<Job> = vec![];
-    let mut current_processing_time = 0.0f64;
-    for job in jobs.iter() {
-        let mut remaining_processing_time = job.processing_time;
-        loop {
-            let remaining_space = (groups.len() + 1) as f64 * step - current_processing_time;
-            // Handle last iteration if the job fits entirely
-            if remaining_processing_time <= remaining_space {
-                let new_job = Job {
-                    id: job_ids.next().unwrap(),
-                    processing_time: remaining_processing_time,
-                    resource_amount: job.resource_amount,
-                };
-                current_processing_time += remaining_processing_time;
-                current_group.push(new_job);
-                break;
-            }
+//     let mut groups: Vec<Vec<Job>> = vec![];
+//     let mut current_group: Vec<Job> = vec![];
+//     let mut current_processing_time = 0.0f64;
+//     for job in jobs.iter() {
+//         let mut remaining_processing_time = job.processing_time;
+//         loop {
+//             let remaining_space = (groups.len() + 1) as f64 * step - current_processing_time;
+//             // Handle last iteration if the job fits entirely
+//             if remaining_processing_time <= remaining_space {
+//                 let new_job = Job {
+//                     id: job_ids.next().unwrap(),
+//                     processing_time: remaining_processing_time,
+//                     resource_amount: job.resource_amount,
+//                 };
+//                 current_processing_time += remaining_processing_time;
+//                 current_group.push(new_job);
+//                 break;
+//             }
 
-            // Split off a bit of the job for the current group
-            let new_job = Job {
-                id: job_ids.next().unwrap(),
-                processing_time: remaining_space,
-                resource_amount: job.resource_amount,
-            };
-            current_group.push(new_job);
-            groups.push(current_group);
+//             // Split off a bit of the job for the current group
+//             let new_job = Job {
+//                 id: job_ids.next().unwrap(),
+//                 processing_time: remaining_space,
+//                 resource_amount: job.resource_amount,
+//             };
+//             current_group.push(new_job);
+//             groups.push(current_group);
 
-            current_group = vec![];
+//             current_group = vec![];
 
-            current_processing_time += remaining_space;
-            remaining_processing_time -= remaining_space;
-        }
-    }
-    println!("Obtained {} groups", groups.len());
-    groups
-}
+//             current_processing_time += remaining_space;
+//             remaining_processing_time -= remaining_space;
+//         }
+//     }
+//     println!("Obtained {} groups", groups.len());
+//     groups
+// }
 
 #[derive(Clone)]
 struct Configuration {
@@ -1154,11 +1153,17 @@ impl Grouping {
             groups: groups.into_iter().map(|group| (0, group)).collect(),
         }
     }
-    fn next(mut self, job: Job) -> Job {
+    fn next(&mut self, job: Job) -> Option<Job> {
         let i = (job.resource_amount % self.group_size) as usize;
+        if self.groups.len() <= i {
+            return None;
+        }
+        if self.groups[i].0 == self.groups[i].1.len() {
+            return None;
+        }
         let res = self.groups[i].1[self.groups[i].0];
         self.groups[i].0 += 1;
-        res
+        Some(res)
     }
 }
 
@@ -1183,11 +1188,11 @@ fn group_by_resource_amount(problem: &ProblemData) -> Grouping {
 
 fn integral_schedule(
     problem: &ProblemData,
-    groups: Vec<Vec<Job>>,
     x_bar: GeneralizedSelection,
     y_bar: NarrowJobSelection,
 ) -> Schedule {
-    let s = Schedule::empty(problem.machine_count as usize);
+    let m = problem.machine_count as usize;
+    let mut s = Schedule::empty(m);
 
     let mut x_hat = GeneralizedSelection {
         configurations: x_bar
@@ -1228,10 +1233,38 @@ fn integral_schedule(
             .partial_cmp(&c1.0.window.resource_amount)
             .expect("bad resource amount, cannot compare")
     });
+    let x_hat = x_hat; // stop mut
 
-    let _groups = group_by_resource_amount(problem);
+    let mut groups = group_by_resource_amount(problem);
     // 2. iterate over solution vector x_hat
-    // 3. put corresponding jobs in the schedule
+    for (c, x_c) in x_hat.configurations {
+        let off = 0;
+        let utilization = vec![0.0; m];
+        for (machine, job) in c
+            .configuration
+            .jobs
+            .into_iter()
+            .flat_map(|(job, i)| repeat(job).take(i as usize))
+            .enumerate()
+        {
+            // 3. put corresponding jobs in the schedule
+            if let Some(job) = groups.next(job) {
+                let found = 'search: {
+                    for i in 0..machine {
+                        let target = (i + off) % m;
+                        if utilization[target] <= x_c {
+                            s.add(target, job);
+                            break 'search true;
+                        }
+                    }
+                    false
+                };
+                if !found {
+                    s.add(machine, job);
+                }
+            }
+        }
+    }
     // 4. iterate over solution vector x_bar
     // 5. put corresponding jobs in the schedule
     // 6. done
