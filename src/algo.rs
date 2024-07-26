@@ -1175,7 +1175,7 @@ fn group_by_resource_amount(problem: &ProblemData) -> Grouping {
     } = *problem;
 
     let group_size = epsilon_prime_squared as f64;
-    let len = 1.0 / group_size;
+    let len = 1.0 / group_size; // G
     let mut groups: Vec<Vec<Job>> = vec![vec![]; len as usize];
     for job in jobs.iter().copied() {
         let r = job.resource_amount;
@@ -1191,10 +1191,9 @@ fn integral_schedule(
     x_bar: GeneralizedSelection,
     y_bar: NarrowJobSelection,
 ) -> Schedule {
-    let m = problem.machine_count as usize;
-    let mut s = Schedule::empty(m);
+    let mut s = Schedule::empty(problem.machine_count as usize);
 
-    let mut x_hat = GeneralizedSelection {
+    let x_hat = GeneralizedSelection {
         configurations: x_bar
             .configurations
             .into_iter()
@@ -1202,72 +1201,73 @@ fn integral_schedule(
             .collect(),
     };
 
-    // let (y_hat, y_hat_fractional): (Vec<_>, Vec<_>) = y_bar
-    //     .processing_times
-    //     .into_iter()
-    //     .partition(|(c, x_c)| c.narrow_job.processing_time - x_c < FLOATING_TOLERANCE);
-    // x_hat.push(
-    //     GeneralizedConfiguration::empty(problem),
-    //     y_hat_fractional.iter().map(|(_, x_c)| x_c).sum(),
-    // );
-    // let mut y_hat = y_hat
-    //     .into_iter()
-    //     .fold(NarrowJobSelection::empty(), |mut sel, (c, x_c)| {
-    //         sel.add(c, x_c);
-    //         sel
-    //     });
-    // let full_window = Window::full(problem);
-    // for (c, x_c) in y_hat_fractional {
-    //     y_hat.add(
-    //         NarrowJobConfiguration {
-    //             narrow_job: c.narrow_job,
-    //             window: full_window,
-    //         },
-    //         x_c,
-    //     );
-    // }
-
-    x_hat.configurations.sort_by(|c0, c1| {
-        c0.0.window
-            .resource_amount
-            .partial_cmp(&c1.0.window.resource_amount)
-            .expect("bad resource amount, cannot compare")
-    });
-    let x_hat = x_hat; // stop mut
+    let window_groups = x_hat
+        .configurations
+        .into_iter()
+        .fold(HashMap::new(), |mut agg, sel| {
+            let key = sel.0.window;
+            let val = (sel.0.configuration, sel.1);
+            match agg.get_mut(&key) {
+                None => {
+                    agg.insert(key, vec![val]);
+                }
+                Some(ls) => {
+                    ls.push(val);
+                }
+            }
+            agg
+        });
 
     let mut groups = group_by_resource_amount(problem);
-    // 2. iterate over solution vector x_hat
-    for (c, x_c) in x_hat.configurations {
-        let off = 0;
-        let utilization = vec![0.0; m];
-        for (machine, job) in c
-            .configuration
-            .jobs
-            .into_iter()
-            .flat_map(|(job, i)| repeat(job).take(i as usize))
-            .enumerate()
-        {
-            // 3. put corresponding jobs in the schedule
-            if let Some(job) = groups.next(job) {
-                let found = 'search: {
-                    for i in 0..machine {
-                        let target = (i + off) % m;
-                        if utilization[target] <= x_c {
-                            s.add(target, job);
-                            break 'search true;
+    for (win, configs) in window_groups {
+        let mut p_w = problem.p_max;
+        for (c, x_c) in configs {
+            p_w += x_c;
+            let m = c.machine_count as usize;
+            let off = 0;
+            let utilization = vec![0.0; m];
+            for (machine, job) in c
+                .jobs
+                .into_iter()
+                .flat_map(|(job, i)| repeat(job).take(i as usize))
+                .enumerate()
+            {
+                if let Some(job) = groups.next(job) {
+                    let found = 'search: {
+                        for i in 0..machine {
+                            let target = (i + off) % m;
+                            if utilization[target] <= x_c {
+                                s.add(target, job);
+                                break 'search true;
+                            }
                         }
+                        false
+                    };
+                    if !found {
+                        s.add(machine, job);
                     }
-                    false
-                };
-                if !found {
-                    s.add(machine, job);
                 }
             }
         }
+
+        let mut narrow_jobs = y_bar.get_jobs_by_window(&win);
+        narrow_jobs.sort_by(|(job0, _), (job1, _)| {
+            job0.resource_amount
+                .partial_cmp(&job1.resource_amount)
+                .expect("bad resource amount, cannot sort")
+                .reverse() // sort by decreasing resource amount
+        });
+        let mut processing_time = 0.0;
+        let mut target_machine = problem.machine_count as usize - 1;
+        for (job, p) in narrow_jobs {
+            if processing_time + p > p_w {
+                processing_time = 0.0;
+                target_machine -= 1;
+            }
+            s.add(target_machine, job);
+            processing_time += p;
+        }
     }
-    // 4. iterate over solution vector x_bar
-    // 5. put corresponding jobs in the schedule
-    // 6. done
 
     s
 }
