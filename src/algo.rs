@@ -34,6 +34,7 @@ struct ProblemData {
     epsilon_prime_squared: f64,
     one_over_epsilon_prime: i32,
     machine_count: i32,
+    machine_count_usize: usize,
     resource_limit: f64,
     jobs: Vec<Job>,
     p_max: f64,
@@ -446,9 +447,9 @@ fn max_min(problem_data: &ProblemData) -> Selection {
     }
     x
 }
-fn print_selection(job_len: usize, m: i32, x: &Selection) {
+fn print_selection(job_len: usize, m: usize, x: &Selection) {
     let digits_per_job_id = (job_len - 1).to_string().len();
-    let lcol = max(4, digits_per_job_id * m as usize);
+    let lcol = max(4, digits_per_job_id * m);
     println!("{: >lcol$} | Length", "Jobs");
     println!("{:->lcol$}---{}", "-", "-".repeat(19));
     for (c, x_c) in x.0.iter() {
@@ -463,12 +464,12 @@ fn print_selection(job_len: usize, m: i32, x: &Selection) {
         println!("{: >lcol$} | {}", job_ids, x_c);
     }
 }
-fn print_gen_selection(job_len: usize, m: i32, r: f64, x: &GeneralizedSelection) {
+fn print_gen_selection(job_len: usize, m: usize, r: f64, x: &GeneralizedSelection) {
     let digits_per_job_id = (job_len - 1).to_string().len();
     let digits_per_machine = m.to_string().len();
     let resource_precision = 2;
     let digits_per_resource = r.ceil().to_string().len() + 1 + resource_precision;
-    let lcol = max("Jobs".len(), digits_per_job_id * m as usize);
+    let lcol = max("Jobs".len(), digits_per_job_id * m);
     let mcol = max(
         "w=(m,r)".len(),
         1 + digits_per_machine + ", ".len() + digits_per_resource + 1,
@@ -1037,7 +1038,7 @@ fn group_by_machine_count(
     problem: &ProblemData,
     x_tilde: &GeneralizedSelection,
 ) -> (f64, Vec<(f64, GeneralizedSelection)>) {
-    let m = problem.machine_count as usize;
+    let m = problem.machine_count_usize;
     println!("m={} and 1/e'={}", m, problem.one_over_epsilon_prime);
     let k_len = min(m, problem.one_over_epsilon_prime as usize);
     // List of K_i sets with pre-computed P_pre(K_i) per set, where i+1 than the number of machines
@@ -1115,7 +1116,7 @@ fn integral_schedule(
     x_bar: GeneralizedSelection,
     y_bar: NarrowJobSelection,
 ) -> Schedule {
-    let mut s = Schedule::empty(problem.machine_count as usize);
+    let mut s = Schedule::empty(problem.machine_count_usize);
 
     let x_hat = GeneralizedSelection {
         configurations: x_bar
@@ -1182,7 +1183,7 @@ fn integral_schedule(
                 .reverse() // sort by decreasing resource amount
         });
         let mut processing_time = 0.0;
-        let mut target_machine = problem.machine_count as usize - 1;
+        let mut target_machine = problem.machine_count_usize - 1;
         for (job, p) in narrow_jobs {
             if processing_time + p > p_w {
                 processing_time = 0.0;
