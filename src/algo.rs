@@ -69,6 +69,7 @@ impl ProblemData {
             epsilon_prime_squared: epsilon_prime * epsilon_prime,
             one_over_epsilon_prime: (1. / epsilon_prime) as i32,
             machine_count,
+            machine_count_usize: machine_count as usize,
             resource_limit,
             jobs: jobs
                 .into_iter()
@@ -153,11 +154,6 @@ impl MachineSchedule {
 }
 
 pub fn compute_schedule(instance: Instance) -> Schedule {
-    let Instance {
-        machine_count,
-        resource_limit,
-        ..
-    } = instance;
     let problem_data = ProblemData::from(instance);
     let (wide_jobs, narrow_jobs): (Vec<Job>, Vec<Job>) = problem_data
         .jobs
@@ -172,16 +168,18 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     let job_len = problem_data.jobs.len();
     let x = max_min(&problem_data);
     println!("Max-min solved with:");
-    print_selection(job_len, machine_count, &x);
+    print_selection(job_len, problem_data.machine_count_usize, &x);
     let x = reduce_to_basic_solution(x);
     println!("Reduced the solution to max-min to:");
-    print_selection(job_len, machine_count, &x);
+    print_selection(job_len, problem_data.machine_count_usize, &x);
     let (x_tilde, y_tilde) = generalize(&problem_data, x);
     println!("Generalized to:");
-    print_gen_selection(job_len, machine_count, resource_limit, &x_tilde);
-    // for x in x_tilde.0.iter() {
-    //     println!("{:?}", x);
-    // }
+    print_gen_selection(
+        job_len,
+        problem_data.machine_count_usize,
+        problem_data.resource_limit,
+        &x_tilde,
+    );
     let (x_bar, y_bar) = reduce_resource_amounts(&problem_data, &x_tilde, &y_tilde);
     println!("{:#?}", x_bar.configurations);
     println!("{:#?}", y_bar.processing_times);
