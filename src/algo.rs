@@ -11,8 +11,6 @@ use std::{
     vec,
 };
 
-// const FLOATING_TOLERANCE: f64 = 0.01;
-
 // RAW INPUT DATA
 #[derive(Debug)]
 pub struct Instance {
@@ -291,15 +289,6 @@ impl Debug for Configuration {
     }
 }
 impl Configuration {
-    fn empty() -> Self {
-        Configuration {
-            jobs: vec![],
-            index: HashMap::new(),
-            processing_time: 0.0,
-            resource_amount: 0.0,
-            machine_count: 0,
-        }
-    }
     fn new(jobs: Vec<(Job, i32)>) -> Self {
         if jobs.windows(2).any(|pair| pair[0].0.id >= pair[1].0.id) {
             panic!("jobs are out of order");
@@ -338,32 +327,6 @@ impl Configuration {
                 .collect(),
         )
     }
-    // fn can_add(&self, job: &Job, problem: &ProblemData) -> bool {
-    //     self.get(job).unwrap_or(0) + 1
-    //         <= if problem.is_wide(job) {
-    //             problem.one_over_epsilon_prime
-    //         } else {
-    //             1
-    //         }
-    //         && self.machine_count + 1 <= problem.machine_count
-    //         && self.resource_amount + job.resource_amount <= problem.resource_limit
-    // }
-    // fn set(&mut self, job: Job, count: i32) {
-    //     match self.index.get(&job.id) {
-    //         None => {
-    //             let i = self.jobs.len();
-    //             self.index.insert(job.id, i);
-    //             self.jobs.push((job, count));
-    //         }
-    //         Some(i) => {
-    //             self.jobs[*i] = (job, count);
-    //         }
-    //     }
-    // }
-    // fn is_valid(&self, instance: Instance) -> bool {
-    //     self.machines() <= instance.machine_count
-    //         && self.resource_amount() <= instance.resource_limit
-    // }
 }
 impl PartialEq for Configuration {
     fn eq(&self, other: &Self) -> bool {
@@ -539,14 +502,14 @@ fn solve_block_problem_ilp(
     let ProblemData {
         machine_count,
         resource_limit,
-        jobs,
+        ref jobs,
         ..
-    } = problem_data;
+    } = *problem_data;
     let wide_job_max_count = (1.0 / precision) as i32;
-    let mut prob = Ilp::new(*machine_count, *resource_limit);
+    let mut prob = Ilp::new(machine_count, resource_limit);
 
     let variables: Vec<(Job, Variable)> = jobs
-        .into_iter()
+        .iter()
         .zip(q.iter())
         .filter(|(_, &q)| q > 0.0)
         .map(|(&job, &q)| {
@@ -560,7 +523,6 @@ fn solve_block_problem_ilp(
                 },
                 q,
             };
-            // println!("Adding variable {:?}", c);
             let var = prob.add(c);
             (job, var)
         })
@@ -778,12 +740,6 @@ impl Window {
             machine_count,
         }
     }
-    fn full(problem: &ProblemData) -> Self {
-        Window {
-            machine_count: problem.machine_count,
-            resource_amount: problem.resource_limit,
-        }
-    }
 }
 impl PartialEq for Window {
     fn eq(&self, other: &Self) -> bool {
@@ -813,14 +769,6 @@ struct GeneralizedConfiguration {
     configuration: Configuration,
     window: Window,
 }
-impl GeneralizedConfiguration {
-    fn empty(problem: &ProblemData) -> Self {
-        GeneralizedConfiguration {
-            configuration: Configuration::empty(),
-            window: Window::full(problem),
-        }
-    }
-}
 impl PartialEq for GeneralizedConfiguration {
     fn eq(&self, other: &Self) -> bool {
         self.configuration.eq(&other.configuration)
@@ -843,25 +791,17 @@ impl Debug for GeneralizedConfiguration {
 #[derive(Clone, Debug)]
 struct GeneralizedSelection {
     configurations: Vec<(GeneralizedConfiguration, f64)>,
-    // configurations: Vec<(Rc<GeneralizedConfiguration>, f64)>,
-    // index: HashMap<Rc<GeneralizedConfiguration>, usize>,
 }
 impl GeneralizedSelection {
     fn empty() -> Self {
         GeneralizedSelection {
             configurations: vec![],
-            // index: HashMap::new(),
         }
     }
     fn from(mapping: HashMap<GeneralizedConfiguration, f64>) -> Self {
         GeneralizedSelection {
             configurations: mapping.into_iter().collect(),
         }
-        // let mut sel = GeneralizedSelection::empty();
-        // for (config, x_c) in mapping.into_iter() {
-        //     sel.set(config, x_c);
-        // }
-        // sel
     }
     fn merge(selections: Vec<GeneralizedSelection>) -> Self {
         GeneralizedSelection {
@@ -874,22 +814,6 @@ impl GeneralizedSelection {
     fn push(&mut self, config: GeneralizedConfiguration, x_c: f64) {
         self.configurations.push((config, x_c));
     }
-    // fn get(&self, config: &GeneralizedConfiguration) -> Option<f64> {
-    //     Some(self.configurations[*self.index.get(config)?].1)
-    // }
-    // fn set(&mut self, config: GeneralizedConfiguration, x_c: f64) {
-    //     let c = Rc::from(config);
-    //     let position = self.index.entry(Rc::clone(&c)).or_insert_with(|| {
-    //         let pos = self.configurations.len();
-    //         self.configurations.push((c, 0.0));
-    //         pos
-    //     });
-    //     self.configurations[*position].1 = x_c;
-    // }
-    // fn add(&mut self, config: &Rc<GeneralizedConfiguration>, x_c: &f64) {
-    //     let position = self.index.get(config).expect("cannot add to missing value");
-    //     self.configurations[*position].1 += x_c;
-    // }
     fn sort_by_resource_amount(&mut self) {
         self.configurations.sort_by(|left, right| {
             left.0
