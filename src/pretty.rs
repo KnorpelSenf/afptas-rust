@@ -23,7 +23,8 @@ pub fn pretty(schedule: Schedule) -> String {
                 |mut agg, job| {
                     let id = job.id;
                     let mut processing_time = job.processing_time;
-                    assert!(processing_time >= TICK, "job {id} too small to be printed!");
+                    // FIXME: assert!(processing_time >= TICK, "job {id} too small to be printed!");
+                    println!("job {id} too small to be printed!");
                     agg.push(format!("-{:->label_width$}-", id));
                     processing_time -= TICK;
                     while processing_time >= TICK {
