@@ -24,7 +24,6 @@ pub fn pretty(schedule: Schedule) -> String {
                     let id = job.id;
                     let mut processing_time = job.processing_time;
                     // FIXME: assert!(processing_time >= TICK, "job {id} too small to be printed!");
-                    println!("job {id} too small to be printed!");
                     agg.push(format!("-{:->label_width$}-", id));
                     processing_time -= TICK;
                     while processing_time >= TICK {
@@ -53,4 +52,20 @@ pub fn pretty(schedule: Schedule) -> String {
     }
     result.push_str(&footer);
     result
+}
+
+pub fn display(schedule: Schedule) -> String {
+    let machine_count = schedule.mapping.len();
+    let job_count: usize = schedule.mapping.iter().map(|m| m.jobs.len()).sum();
+    let mut str = String::with_capacity((job_count as f64).log10() as usize * job_count);
+
+    for machine in schedule.mapping {
+        str.push_str(&format!("M{}: ", machine_count));
+        for job in machine.jobs {
+            str.push_str(&format!("{} ", job.id));
+        }
+        str.push_str("\n");
+    }
+
+    str
 }
