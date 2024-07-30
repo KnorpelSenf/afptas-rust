@@ -534,7 +534,7 @@ fn solve_block_problem_ilp(
         .map(|(job, var)| (job, solution.value(var) as i32))
         .filter(|(_, var)| *var != 0)
         .collect();
-    println!("Solved ILP for {:?} with {:?}", q, a_star);
+    println!("Solved ILP for {} items with {:?}", q.len(), a_star);
     Configuration::new(a_star)
 }
 
@@ -1019,6 +1019,7 @@ fn reduce_resource_amounts(
         })
         .unzip();
 
+    println!("Created {} stack", stacks.len());
     for (i, stack) in stacks.iter().enumerate() {
         println!("  --- K_{} ---  ", i + 1);
         for (config, x_c) in stack.configurations.iter() {
@@ -1026,6 +1027,7 @@ fn reduce_resource_amounts(
         }
     }
 
+    println!("Merging configurations");
     (
         GeneralizedSelection::merge(stacks),
         NarrowJobSelection::merge(narrow_jobs),
@@ -1098,6 +1100,10 @@ fn group_by_resource_amount(problem: &ProblemData) -> Grouping {
     } = *problem;
 
     let group_size = epsilon_prime_squared as f64;
+    println!(
+        "Grouping by resource amount into groups of size {}",
+        group_size
+    );
     let len = 1.0 / group_size; // G
     let mut groups: Vec<Vec<Job>> = vec![vec![]; len as usize];
     for job in jobs.iter().copied() {
@@ -1106,7 +1112,9 @@ fn group_by_resource_amount(problem: &ProblemData) -> Grouping {
         groups[i as usize].push(job)
     }
 
-    Grouping::new(problem, groups)
+    let g = Grouping::new(problem, groups);
+    println!("Created {} groups", g.groups.len());
+    g
 }
 
 fn integral_schedule(
@@ -1114,6 +1122,7 @@ fn integral_schedule(
     x_bar: GeneralizedSelection,
     y_bar: NarrowJobSelection,
 ) -> Schedule {
+    println!("Computing integral schedule");
     let mut s = Schedule::empty(problem.machine_count_usize);
 
     let x_hat = GeneralizedSelection {
@@ -1124,6 +1133,10 @@ fn integral_schedule(
             .collect(),
     };
 
+    println!(
+        "Grouping {} entries in x_hat by windows",
+        x_hat.configurations.len()
+    );
     let window_groups = x_hat
         .configurations
         .into_iter()
@@ -1142,6 +1155,7 @@ fn integral_schedule(
         });
 
     let mut groups = group_by_resource_amount(problem);
+    println!("Finding jobs");
     for (win, configs) in window_groups {
         let mut p_w = problem.p_max;
         for (c, x_c) in configs {
@@ -1192,5 +1206,6 @@ fn integral_schedule(
         }
     }
 
+    println!("Done creating integral schedule");
     s
 }
