@@ -723,10 +723,7 @@ fn generalize(problem: &ProblemData, x: Selection) -> (GeneralizedSelection, Nar
                         configuration: c_w,
                         window,
                     };
-                    acc_x
-                        .entry(gen)
-                        .and_modify(|existing| *existing += *x_c)
-                        .or_insert(*x_c);
+                    *acc_x.entry(gen).or_insert(0.0) += *x_c;
 
                     (acc_x, acc_y)
                 },
@@ -885,20 +882,11 @@ impl NarrowJobSelection {
         }
     }
     fn add(&mut self, config: NarrowJobConfiguration, processing_time: f64) {
-        self.processing_times
-            .entry(config)
-            .and_modify(|old| *old += processing_time)
-            .or_insert(processing_time);
+        *self.processing_times.entry(config).or_insert(0.0) += processing_time;
         self.windex
             .entry(config.window)
-            .and_modify(|set| {
-                set.insert(config.narrow_job);
-            })
-            .or_insert_with(|| {
-                let mut s = HashSet::new();
-                s.insert(config.narrow_job);
-                s
-            });
+            .or_insert(HashSet::new())
+            .insert(config.narrow_job);
     }
 
     fn empty() -> Self {
