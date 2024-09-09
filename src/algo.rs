@@ -705,8 +705,10 @@ fn generalize(problem: &ProblemData, x: Selection) -> (GeneralizedSelection, Nar
                         configuration: c_w,
                         window,
                     };
-                    let existing = acc_x.get(&gen).unwrap_or(&0.0);
-                    acc_x.insert(gen, x_c + existing);
+                    acc_x
+                        .entry(gen)
+                        .and_modify(|existing| *existing += *x_c)
+                        .or_insert(*x_c);
 
                     (acc_x, acc_y)
                 },
