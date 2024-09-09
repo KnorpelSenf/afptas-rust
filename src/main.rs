@@ -31,6 +31,6 @@ fn main() {
     } else {
         println!("Result is:");
         println!("{}", display(schedule));
+        println!("{machine_count} machines.");
     }
-    println!("{machine_count} machines.");
 }
