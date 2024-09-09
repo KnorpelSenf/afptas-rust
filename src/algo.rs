@@ -170,7 +170,7 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     println!("Max-min solved with:");
     print_selection(job_len, problem_data.machine_count_usize, &x);
     let x = reduce_to_basic_solution(x);
-    println!("Reduced the solution to max-min to:");
+    println!("Reduced the max-min solution min to:");
     print_selection(job_len, problem_data.machine_count_usize, &x);
     let (x_tilde, y_tilde) = generalize(&problem_data, x);
     println!("Generalized to:");
@@ -181,8 +181,10 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
         &x_tilde,
     );
     let (x_bar, y_bar) = reduce_resource_amounts(&problem_data, &x_tilde, &y_tilde);
-    println!("{:#?}", x_bar.configurations);
-    println!("{:#?}", y_bar.processing_times);
+    // println!("x_bar entries:");
+    // println!("{:#?}", x_bar.configurations);
+    // println!("y_bar entries are:");
+    // println!("{:#?}", y_bar.processing_times);
 
     integral_schedule(&problem_data, x_bar, y_bar)
 }
@@ -912,13 +914,14 @@ fn reduce_resource_amounts(
     println!("Reducing resource amounts");
     let (p_pre, k) = group_by_machine_count(problem, x_tilde);
 
-    println!("P_pre={p_pre}");
+    println!("p_pre={p_pre}");
     let step_width = problem.epsilon_prime_squared * p_pre;
     println!("Step width is {step_width}");
 
     let (stacks, narrow_jobs): (Vec<GeneralizedSelection>, Vec<NarrowJobSelection>) = k
         .into_iter()
         .map(|(x_c, k_i)| {
+            println!("  Processing generalized selection with x_c={x_c}");
             let (sel, narrow, _, _, _) = k_i
                 .configurations
                 .into_iter()
@@ -937,20 +940,38 @@ fn reduce_resource_amounts(
                         vec![],
                     ),
                     |(mut wide_sel, mut narrow_sel, e_c, mut window, mut k_i), (c, mut p)| {
+                        println!("    Processing configuration {:?} with p={p}", c);
                         let s_c = e_c - p;
                         let cur_step = (e_c / step_width).floor();
                         let next_step = (s_c / step_width).floor();
                         let is_cut = cur_step != next_step;
 
+                        println!("    s_c={s_c} --- {e_c}=e_c");
+                        print!("    current={cur_step} --- {next_step}=next");
+                        if is_cut {
+                            println!(" ++ CUT! ++");
+                        } else {
+                            println!();
+                        }
+
                         k_i.push(c.clone());
 
                         if is_cut {
                             let lowest_cut = (s_c / step_width).ceil() * step_width;
+                            println!("    lowest cut={lowest_cut}");
                             let p_w_ik: f64 = k_i
                                 .iter()
                                 .map(|k_ik| {
+                                    println!(
+                                        "    Adding narrow jobs from K_ik by window {:?}",
+                                        k_ik.window
+                                    );
                                     y_tilde.get_jobs_by_window(&k_ik.window).iter().for_each(
                                         |(narrow_job, amount)| {
+                                            println!(
+                                                "      Adding {:?} with amount={amount}",
+                                                narrow_job
+                                            );
                                             narrow_sel.add(
                                                 NarrowJobConfiguration {
                                                     narrow_job: *narrow_job,
@@ -970,9 +991,16 @@ fn reduce_resource_amounts(
                             let phi_down = w_down / p_w_ik;
                             let phi_up = 1.0 - phi_down;
                             let next_window = c.window;
+                            println!("    Next window will be {:?}", c.window);
 
+                            println!("    Adding narrow jobs by window {:?}", window);
                             y_tilde.get_jobs_by_window(&window).iter().for_each(
                                 |(narrow_job, amount)| {
+                                    println!(
+                                        "      Adding {:?} with amount={} to current window",
+                                        narrow_job,
+                                        *amount * phi_up
+                                    );
                                     narrow_sel.add(
                                         NarrowJobConfiguration {
                                             narrow_job: *narrow_job,
@@ -982,6 +1010,11 @@ fn reduce_resource_amounts(
                                     );
                                     // TODO: this also has to happen for the last window (R,m), which should be
                                     // x_bar(emptyset, (R,m)) = x_tilde(emptyset, (R,m)) + epsilon_prime * P_pre
+                                    println!(
+                                        "      Adding {:?} with amount={} to next window",
+                                        narrow_job,
+                                        *amount * phi_down
+                                    );
                                     narrow_sel.add(
                                         NarrowJobConfiguration {
                                             narrow_job: *narrow_job,
@@ -994,6 +1027,7 @@ fn reduce_resource_amounts(
 
                             let highest_cut = cur_step * step_width;
                             let p_diff = e_c - highest_cut;
+                            println!("    Adding generalized config with x_c={p_diff}");
                             wide_sel.push(
                                 GeneralizedConfiguration {
                                     configuration: c.configuration.clone(),
@@ -1006,6 +1040,7 @@ fn reduce_resource_amounts(
                             p -= p_diff;
                         }
 
+                        println!("    Adding generalized config with x_c={p}");
                         wide_sel.push(
                             GeneralizedConfiguration {
                                 configuration: c.configuration,
@@ -1014,14 +1049,21 @@ fn reduce_resource_amounts(
                             p,
                         );
 
+                        println!("    Done processing configuration, p is now {p}");
                         (wide_sel, narrow_sel, s_c, window, k_i)
                     },
                 );
+            println!(
+                "  Obtained a selection with {} wide jobs and a selection with {} narrow jobs",
+                sel.configurations.len(),
+                narrow.processing_times.len()
+            );
+            println!("  Done processing generalized selection with x_c={x_c}");
             (sel, narrow)
         })
         .unzip();
 
-    println!("Created {} stack", stacks.len());
+    println!("Done creating {} stacks:", stacks.len());
     for (i, stack) in stacks.iter().enumerate() {
         println!("  --- K_{} ---  ", i + 1);
         for (config, x_c) in stack.configurations.iter() {
@@ -1030,19 +1072,24 @@ fn reduce_resource_amounts(
     }
 
     println!("Merging configurations");
-    (
-        GeneralizedSelection::merge(stacks),
-        NarrowJobSelection::merge(narrow_jobs),
-    )
+    let wide = GeneralizedSelection::merge(stacks);
+    let narrow = NarrowJobSelection::merge(narrow_jobs);
+    println!("Done merging configurations");
+    println!(
+        "Done reducing resource amounts resulting in {} entries in the wide job selection and {} entries in the narrow job selection",
+         wide.configurations.len(), narrow.processing_times.len());
+    (wide, narrow)
 }
 
 fn group_by_machine_count(
     problem: &ProblemData,
     x_tilde: &GeneralizedSelection,
 ) -> (f64, Vec<(f64, GeneralizedSelection)>) {
+    println!("Grouping by machine count");
     let m = problem.machine_count_usize;
     println!("m={} and 1/e'={}", m, problem.one_over_epsilon_prime);
     let k_len = min(m, problem.one_over_epsilon_prime as usize);
+    println!("Creating {k_len} sets");
     // List of K_i sets with pre-computed P_pre(K_i) per set, where i+1 than the number of machines
     let mut k: Vec<(f64, GeneralizedSelection)> = vec![(0.0, GeneralizedSelection::empty()); k_len];
     let mut p_pre = 0.0;
@@ -1061,11 +1108,15 @@ fn group_by_machine_count(
         k[group].0 += x_c;
         k[group].1.push(c.clone(), *x_c);
     }
+    println!("Done creating sets with p_pre={p_pre}");
 
+    println!("Sorting groups");
     for (_, k_i) in k.iter_mut() {
         k_i.sort_by_resource_amount();
     }
+    println!("Done sorting groups");
 
+    println!("Done grouping by machine count");
     (p_pre, k)
 }
 
@@ -1155,12 +1206,16 @@ fn integral_schedule(
             }
             agg
         });
+    println!("Obtained {} window groups", window_groups.len());
 
     let mut groups = group_by_resource_amount(problem);
     println!("Finding jobs");
     for (win, configs) in window_groups {
         let mut p_w = problem.p_max;
+        println!("Looking at window {:?} with p_w={}", win, p_w);
+        println!("Adding wide jobs");
         for (c, x_c) in configs {
+            println!("  Adding config {:?} with x_c={}", c, x_c);
             p_w += x_c;
             let m = c.machine_count as usize;
             let off = 0;
@@ -1171,11 +1226,13 @@ fn integral_schedule(
                 .flat_map(|(job, i)| repeat(job).take(i as usize))
                 .enumerate()
             {
+                print!("    Finding location for {:?} ...", job);
                 if let Some(job) = groups.next(job) {
                     let found = 'search: {
                         for i in 0..machine {
                             let target = (i + off) % m;
                             if utilization[target] <= x_c {
+                                println!(" found at machine {target}.");
                                 s.add(target, job);
                                 break 'search true;
                             }
@@ -1183,12 +1240,16 @@ fn integral_schedule(
                         false
                     };
                     if !found {
+                        println!(" not found, falling back to {machine}");
                         s.add(machine, job);
                     }
+                } else {
+                    println!(" no matching job found in grouping!");
                 }
             }
         }
 
+        println!("Adding narrow jobs");
         let mut narrow_jobs = y_bar.get_jobs_by_window(&win);
         narrow_jobs.sort_by(|(job0, _), (job1, _)| {
             job0.resource_amount
@@ -1198,11 +1259,14 @@ fn integral_schedule(
         });
         let mut processing_time = 0.0;
         let mut target_machine = problem.machine_count_usize - 1;
+        println!("  Starting at machine {target_machine}, limited at processing time p_w={p_w}");
         for (job, p) in narrow_jobs {
             if processing_time + p > p_w {
+                println!("  Machine {target_machine} full because processing time is {processing_time}, stepping back");
                 processing_time = 0.0;
                 target_machine -= 1;
             }
+            println!("  Adding {:?} to {target_machine}", job);
             s.add(target_machine, job);
             processing_time += p;
         }
