@@ -127,16 +127,32 @@ impl Hash for Job {
 
 #[derive(Clone, Debug)]
 pub struct Schedule {
-    pub mapping: Vec<MachineSchedule>,
+    pub chunks: Vec<ScheduleChunk>,
 }
 impl Schedule {
-    fn empty(machine_count: usize) -> Self {
-        Schedule {
-            mapping: vec![MachineSchedule::empty(); machine_count],
+    fn empty() -> Self {
+        Schedule { chunks: vec![] }
+    }
+    fn push(&mut self, chunk: ScheduleChunk) {
+        self.chunks.push(chunk);
+    }
+    fn push_all(&mut self, chunks: Vec<ScheduleChunk>) {
+        self.chunks.extend(chunks);
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ScheduleChunk {
+    pub machines: Vec<MachineSchedule>,
+}
+impl ScheduleChunk {
+    fn empty(problem: &ProblemData) -> Self {
+        ScheduleChunk {
+            machines: vec![MachineSchedule::empty(); problem.machine_count_usize],
         }
     }
     fn add(&mut self, machine: usize, job: Job) {
-        self.mapping[machine].push(job)
+        self.machines[machine].push(job)
     }
 }
 
@@ -1159,7 +1175,7 @@ fn group_by_resource_amount(problem: &ProblemData) -> Grouping {
     );
     let len = 1.0 / group_size; // G
     let mut groups: Vec<Vec<Job>> = vec![vec![]; len as usize];
-    for job in jobs.iter().copied() {
+    for job in jobs.iter().filter(|job| problem.is_wide(job)).copied() {
         let r = job.resource_amount;
         let i = r % group_size;
         groups[i as usize].push(job)
@@ -1176,13 +1192,20 @@ fn integral_schedule(
     y_bar: NarrowJobSelection,
 ) -> Schedule {
     println!("Computing integral schedule");
-    let mut s = Schedule::empty(problem.machine_count_usize);
+    let ProblemData {
+        p_max,
+        machine_count_usize,
+        ..
+    } = *problem;
+    let mut s = Schedule::empty();
+
+    let mut full_chunk = ScheduleChunk::empty(problem);
 
     let x_hat = GeneralizedSelection {
         configurations: x_bar
             .configurations
             .into_iter()
-            .map(|(c, x_c)| (c, x_c + problem.p_max))
+            .map(|(c, x_c)| (c, x_c + p_max))
             .collect(),
     };
 
@@ -1190,20 +1213,13 @@ fn integral_schedule(
         "Grouping {} entries in x_hat by windows",
         x_hat.configurations.len()
     );
-    let window_groups = x_hat
+    let window_groups: HashMap<Window, Vec<(Configuration, f64)>> = x_hat
         .configurations
         .into_iter()
         .fold(HashMap::new(), |mut agg, sel| {
-            let key = sel.0.window;
-            let val = (sel.0.configuration, sel.1);
-            match agg.get_mut(&key) {
-                None => {
-                    agg.insert(key, vec![val]);
-                }
-                Some(ls) => {
-                    ls.push(val);
-                }
-            }
+            agg.entry(sel.0.window)
+                .or_insert(vec![])
+                .push((sel.0.configuration, sel.1));
             agg
         });
     println!("Obtained {} window groups", window_groups.len());
@@ -1211,43 +1227,31 @@ fn integral_schedule(
     let mut groups = group_by_resource_amount(problem);
     println!("Finding jobs");
     for (win, configs) in window_groups {
-        let mut p_w = problem.p_max;
-        println!("Looking at window {:?} with p_w={}", win, p_w);
-        println!("Adding wide jobs");
-        for (c, x_c) in configs {
-            println!("  Adding config {:?} with x_c={}", c, x_c);
-            p_w += x_c;
-            let m = c.machine_count as usize;
-            let off = 0;
-            let utilization = vec![0.0; m];
-            for (machine, job) in c
-                .jobs
-                .into_iter()
-                .flat_map(|(job, i)| repeat(job).take(i as usize))
-                .enumerate()
-            {
-                print!("    Finding location for {:?} ...", job);
-                if let Some(job) = groups.next(job) {
-                    let found = 'search: {
-                        for i in 0..machine {
-                            let target = (i + off) % m;
-                            if utilization[target] <= x_c {
-                                println!(" found at machine {target}.");
-                                s.add(target, job);
-                                break 'search true;
-                            }
-                        }
-                        false
-                    };
-                    if !found {
-                        println!(" not found, falling back to {machine}");
-                        s.add(machine, job);
+        println!("Looking at window {:?}", win);
+        println!("Creating chunks with wide jobs");
+        let mut chunks: Vec<(ScheduleChunk, f64)> = configs
+            .into_iter()
+            .map(|(c, x_c)| {
+                let mut chunk = ScheduleChunk::empty(problem);
+                println!("  Adding config {:?} with x_c={}", c, x_c);
+                for (machine, job) in c
+                    .jobs
+                    .into_iter()
+                    .flat_map(|(job, i)| repeat(job).take(i as usize))
+                    .enumerate()
+                {
+                    print!("    Finding location for {:?} ...", job);
+                    if let Some(job) = groups.next(job) {
+                        println!(" found {}, adding it to machine {machine}", job.id);
+                        chunk.add(machine, job);
+                    } else {
+                        println!(" no matching job found in grouping!");
                     }
-                } else {
-                    println!(" no matching job found in grouping!");
                 }
-            }
-        }
+                (chunk, x_c)
+            })
+            .collect();
+        println!("Done creating {} chunks with wide jobs", chunks.len());
 
         println!("Adding narrow jobs");
         let mut narrow_jobs = y_bar.get_jobs_by_window(&win);
@@ -1257,20 +1261,34 @@ fn integral_schedule(
                 .expect("bad resource amount, cannot sort")
                 .reverse() // sort by decreasing resource amount
         });
-        let mut processing_time = 0.0;
-        let mut target_machine = problem.machine_count_usize - 1;
-        println!("  Starting at machine {target_machine}, limited at processing time p_w={p_w}");
+        let mut used_processing_time = 0.0;
+        let mut target_chunk = 0;
+        let mut target_machine = machine_count_usize - 1;
+        println!("  Starting at machine {target_machine}");
         for (job, p) in narrow_jobs {
-            if processing_time + p > p_w {
-                println!("  Machine {target_machine} full because processing time is {processing_time}, stepping back");
-                processing_time = 0.0;
-                target_machine -= 1;
+            if job.processing_time != p {
+                full_chunk.add(0, job)
+            } else {
+                if used_processing_time + job.processing_time > chunks[target_chunk].1 {
+                    used_processing_time = 0.0;
+                    if target_chunk == chunks.len() - 1 {
+                        println!("  Machine {target_machine} full, stepping back");
+                        target_chunk = 0;
+                        target_machine -= 1;
+                    } else {
+                        target_chunk += 1;
+                    }
+                }
+                println!("  Adding {:?} to {target_machine}", job);
+                chunks[target_chunk].0.add(target_machine, job);
+                used_processing_time += job.processing_time;
             }
-            println!("  Adding {:?} to {target_machine}", job);
-            s.add(target_machine, job);
-            processing_time += p;
         }
+        s.push_all(chunks.into_iter().map(|(chunk, _)| chunk).collect());
+        println!("Done looking at window {:?}", win);
     }
+
+    s.push(full_chunk);
 
     println!("Done creating integral schedule");
     s
