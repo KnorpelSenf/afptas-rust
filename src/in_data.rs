@@ -10,7 +10,6 @@ use clap::Parser;
 use crate::algo::Instance;
 use crate::algo::InstanceJob;
 
-/// Simple program to greet a person
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
