@@ -1,5 +1,5 @@
-use svg::node::element::path::Data;
-use svg::node::element::Path;
+use svg::node::element::{Group, LinearGradient, Rectangle, Stop, Style, Text};
+use svg::node::Text as SvgText;
 use svg::Document;
 
 use crate::algo::{Schedule, ScheduleChunk};
@@ -86,19 +86,76 @@ fn display_chunk(chunks: ScheduleChunk) -> String {
 }
 
 pub fn svg(schedule: Schedule) -> String {
-    let data = Data::new()
-        .move_to((10, 10))
-        .line_by((0, 50))
-        .line_by((50, 0))
-        .line_by((0, -50))
-        .close();
+    // Create the linear gradient for the background
+    let gradient = LinearGradient::new()
+        .set("id", "background")
+        .set("y1", "0")
+        .set("y2", "1")
+        .set("x1", "0")
+        .set("x2", "0")
+        .add(Stop::new().set("stop-color", "#eeeeee").set("offset", "5%"))
+        .add(
+            Stop::new()
+                .set("stop-color", "#b0b0ee")
+                .set("offset", "95%"),
+        );
 
-    let path = Path::new()
-        .set("fill", "none")
-        .set("stroke", "black")
-        .set("stroke-width", 3)
-        .set("d", data);
+    // Create the SVG document
+    let document = Document::new()
+        .set("width", "100%")
+        .set("height", "100%")
+        .set("version", "1.1")
+        .set("xmlns", "http://www.w3.org/2000/svg")
+        .set("xmlns:svg", "http://www.w3.org/2000/svg")
+        .add(gradient)
+        .add(Style::new(
+            r#"
+            text { font-family:monospace; font-size:12px; fill:black; }
+            #title { text-anchor:middle; font-size:20px; }
+            .machine-box { fill:blue; stroke-width:1; stroke:black; }
+            .machine-label { text-anchor:middle; dominant-baseline:middle; font-size:15px; }
+        "#,
+        ))
+        .add(
+            Rectangle::new()
+                .set("x", 0)
+                .set("y", 0)
+                .set("width", "100%")
+                .set("height", "100%")
+                .set("fill", "url(#background)"),
+        )
+        .add(create_title())
+        .add(create_machine("Machine A", 10, 10))
+        .add(create_machine("Machine B", 10, 21))
+        .add(create_machine("Machine C", 10, 32));
 
-    let document = Document::new().set("viewBox", (0, 0, 70, 70)).add(path);
-    document.to_string()
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+{}"#,
+        document.to_string()
+    )
+}
+
+fn create_title() -> Text {
+    Text::new("Schedule")
+        .set("id", "title")
+        .set("x", "50%")
+        .set("y", 24)
+        .set("fill", "rgb(0,0,0)")
+}
+
+fn create_machine(name: &str, x: usize, y: usize) -> Group {
+    let machine_box = Rectangle::new()
+        .set("x", format!("{}%", x))
+        .set("y", format!("{}%", y))
+        .set("width", "10%")
+        .set("height", "10%")
+        .set("class", "machine-box");
+
+    let machine_label = Text::new(name)
+        .set("x", format!("{}%", x + 5)) // Centered on the rectangle
+        .set("y", format!("{}%", y + 5)) // Centered on the rectangle
+        .set("class", "machine-label");
+
+    Group::new().add(machine_box).add(machine_label)
 }
