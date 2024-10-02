@@ -85,7 +85,7 @@ fn display_chunk(chunks: ScheduleChunk) -> String {
     str
 }
 
-pub fn svg(schedule: Schedule) -> String {
+pub fn svg(_schedule: Schedule) -> String {
     // Create the linear gradient for the background
     let gradient = LinearGradient::new()
         .set("id", "background")
@@ -101,47 +101,47 @@ pub fn svg(schedule: Schedule) -> String {
         );
 
     // Create the SVG document
-    let document = Document::new()
-        .set("width", "100%")
-        .set("height", "100%")
-        .set("version", "1.1")
-        .set("xmlns", "http://www.w3.org/2000/svg")
-        .set("xmlns:svg", "http://www.w3.org/2000/svg")
-        .add(gradient)
-        .add(Style::new(
-            r#"
-            text { font-family:monospace; font-size:12px; fill:black; }
-            #title { text-anchor:middle; font-size:20px; }
-            .machine-box { fill:blue; stroke-width:1; stroke:black; }
-            .machine-label { text-anchor:middle; dominant-baseline:middle; font-size:15px; }
-        "#,
-        ))
-        .add(
-            Rectangle::new()
-                .set("x", 0)
-                .set("y", 0)
-                .set("width", "100%")
-                .set("height", "100%")
-                .set("fill", "url(#background)"),
-        )
-        .add(create_title())
-        .add(create_machine("Machine A", 10, 10))
-        .add(create_machine("Machine B", 10, 21))
-        .add(create_machine("Machine C", 10, 32));
+    let doc = vec!["A", "B", "C"].iter().enumerate().fold(
+        Document::new()
+            .set("width", "100%")
+            .set("height", "100%")
+            .set("version", "1.1")
+            .set("xmlns", "http://www.w3.org/2000/svg")
+            .set("xmlns:svg", "http://www.w3.org/2000/svg")
+            .add(gradient)
+            .add(Style::new(
+                r#"
+text { font-family:monospace; font-size:12px; fill:black; }
+#title { text-anchor:middle; font-size:20px; }
+.machine-box { fill:blue; stroke-width:1; stroke:black; }
+.machine-label { text-anchor:middle; dominant-baseline:middle; font-size:15px; }
+"#,
+            ))
+            // background
+            .add(
+                Rectangle::new()
+                    .set("x", 0)
+                    .set("y", 0)
+                    .set("width", "100%")
+                    .set("height", "100%")
+                    .set("fill", "url(#background)"),
+            )
+            // title
+            .add(
+                Text::new("Schedule")
+                    .set("id", "title")
+                    .set("x", "50%")
+                    .set("y", 24)
+                    .set("fill", "rgb(0,0,0)"),
+            ),
+        |doc, (i, label)| doc.add(create_machine(label, 10, 10 + 11 * i)),
+    );
 
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 {}"#,
-        document.to_string()
+        doc.to_string()
     )
-}
-
-fn create_title() -> Text {
-    Text::new("Schedule")
-        .set("id", "title")
-        .set("x", "50%")
-        .set("y", 24)
-        .set("fill", "rgb(0,0,0)")
 }
 
 fn create_machine(name: &str, x: usize, y: usize) -> Group {
