@@ -1,4 +1,5 @@
-use svg::node::element::{Group, LinearGradient, Rectangle, Stop, Style, Text, SVG};
+use colors_transform::{Color, Hsl};
+use svg::node::element::{Group, LinearGradient, Rectangle, Stop, Style, Text, Title, SVG};
 use svg::Document;
 
 use crate::algo::{Job, MachineSchedule, Schedule, ScheduleChunk};
@@ -9,6 +10,8 @@ const TICK: f64 = 0.5;
 const LEFT_MARGIN: usize = 50; // px
 const TOP_HEADER_MARGIN: usize = 50; // px
 const TOP_MARGIN: usize = TOP_HEADER_MARGIN + 20; // px
+const RIGHT_MARGIN: usize = 30; // px
+const BOTTOM_MARGIN: usize = 20; // px
 const MACHINE_WIDTH: usize = 100; // px
 const MACHINE_HEIGHT_SCALE: usize = 20; // px for each unit of processing time
 const MACHINE_SPACING: usize = 10; // px
@@ -91,7 +94,7 @@ fn display_chunk(chunks: ScheduleChunk) -> String {
     str
 }
 
-pub fn svg(schedule: Schedule) -> String {
+pub fn svg(resource_limit: f64, schedule: Schedule) -> String {
     // Create the linear gradient for the background
     let gradient = LinearGradient::new()
         .set("id", "background")
@@ -108,8 +111,6 @@ pub fn svg(schedule: Schedule) -> String {
 
     let chart = (0..schedule.machine_count).map(create_machine_header).fold(
         Document::new()
-            .set("width", "100%")
-            .set("height", "100%")
             .set("version", "1.1")
             .set("xmlns", "http://www.w3.org/2000/svg")
             .set("xmlns:svg", "http://www.w3.org/2000/svg")
@@ -119,7 +120,7 @@ pub fn svg(schedule: Schedule) -> String {
 text { font-family:monospace; font-size:10px; fill:black; }
 #title { text-anchor:middle; font-size:25px; }
 .machine-header { text-anchor:middle; font-size:17px; }
-.machine-box { fill:blue; stroke-width:1; stroke:black; }
+.machine-box { stroke-width:1; stroke:black; }
 .machine-label { text-anchor:middle; dominant-baseline:middle; font-size:15px; }
 "#,
             ))
@@ -142,33 +143,48 @@ text { font-family:monospace; font-size:10px; fill:black; }
         |doc, header| doc.add(header),
     );
     // Create the SVG document
-    let (document, _) = schedule
+    let (document, height) = schedule
         .chunks
         .into_iter()
         .fold((chart, TOP_MARGIN), |(doc, off), chunk| {
-            add_chunk_to_doc(doc, off, chunk)
+            add_chunk_to_doc(resource_limit, doc, off, chunk)
         });
+
+    let body = document
+        .set(
+            "width",
+            LEFT_MARGIN + schedule.machine_count * (MACHINE_WIDTH + MACHINE_SPACING)
+                - MACHINE_SPACING
+                + RIGHT_MARGIN,
+        )
+        .set("height", height + BOTTOM_MARGIN)
+        .to_string();
 
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-{}"#,
-        document.to_string()
+{body}"#
     )
 }
 
-fn add_chunk_to_doc(document: SVG, vertical_offset: usize, chunk: ScheduleChunk) -> (SVG, usize) {
+fn add_chunk_to_doc(
+    resource_limit: f64,
+    document: SVG,
+    vertical_offset: usize,
+    chunk: ScheduleChunk,
+) -> (SVG, usize) {
     chunk.machines.into_iter().enumerate().fold(
         (document, vertical_offset),
         |(doc, max_height), (machine, schedule)| {
             let x = LEFT_MARGIN + machine * (MACHINE_WIDTH + MACHINE_SPACING);
             let y = vertical_offset;
-            let (svg, height) = add_machine_to_doc(doc, x, y, schedule);
+            let (svg, height) = add_machine_to_doc(resource_limit, doc, x, y, schedule);
             (svg, max(height, max_height))
         },
     )
 }
 
 fn add_machine_to_doc(
+    resource_limit: f64,
     document: SVG,
     x: usize,
     y: usize,
@@ -178,7 +194,7 @@ fn add_machine_to_doc(
         .jobs
         .into_iter()
         .fold((document, y), |(doc, off), job| {
-            let (element, h) = create_machine(job, x, off);
+            let (element, h) = create_machine(resource_limit, job, x, off);
             (doc.add(element), off + h)
         })
 }
@@ -194,14 +210,21 @@ fn create_machine_header(i: usize) -> Text {
         .set("class", "machine-header")
 }
 
-fn create_machine(job: Job, x: usize, y: usize) -> (Group, usize) {
+fn create_machine(resource_limit: f64, job: Job, x: usize, y: usize) -> (Group, usize) {
     let w = MACHINE_WIDTH;
     let h = MACHINE_HEIGHT_SCALE * job.processing_time as usize;
+    let lightness = 50.0f32 + 25.0f32 * (job.resource_amount / resource_limit) as f32;
     let machine_box = Rectangle::new()
         .set("x", x)
         .set("y", y)
         .set("width", w)
         .set("height", h)
+        .set(
+            "fill",
+            Hsl::from(240.0, 100.0, lightness)
+                .to_rgb()
+                .to_css_hex_string(),
+        )
         .set("class", "machine-box");
 
     let machine_label = Text::new(job.id.to_string())
@@ -209,5 +232,16 @@ fn create_machine(job: Job, x: usize, y: usize) -> (Group, usize) {
         .set("y", y + h / 2) // Centered on the rectangle
         .set("class", "machine-label");
 
-    (Group::new().add(machine_box).add(machine_label), h)
+    let tooltip = Title::new(format!(
+        "Job {} (p={}, r={})",
+        job.id, job.processing_time, job.resource_amount
+    ));
+
+    (
+        Group::new()
+            .add(machine_box)
+            .add(machine_label)
+            .add(tooltip),
+        h,
+    )
 }

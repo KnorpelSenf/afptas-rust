@@ -28,7 +28,7 @@ fn main() {
 
     println!("Done in {:?}.", duration);
     if to_svg {
-        let file_data = svg(schedule);
+        let file_data = svg(resource_limit, schedule);
         let mut file = File::create("schedule.svg").expect("cannot create file schedule.svg");
         file.write_all(file_data.as_bytes())
             .expect("cannot write to file schedule.svg");
