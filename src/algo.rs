@@ -127,17 +127,27 @@ impl Hash for Job {
 
 #[derive(Clone, Debug)]
 pub struct Schedule {
+    pub machine_count: usize,
     pub chunks: Vec<ScheduleChunk>,
 }
 impl Schedule {
-    fn empty() -> Self {
-        Schedule { chunks: vec![] }
+    fn empty(problem: &ProblemData) -> Self {
+        Schedule {
+            machine_count: problem.machine_count_usize,
+            chunks: vec![],
+        }
     }
     fn push(&mut self, chunk: ScheduleChunk) {
         self.chunks.push(chunk);
     }
     fn push_all(&mut self, chunks: Vec<ScheduleChunk>) {
         self.chunks.extend(chunks);
+    }
+
+    fn make_chunk(&self) -> ScheduleChunk {
+        ScheduleChunk {
+            machines: vec![MachineSchedule::empty(); self.machine_count],
+        }
     }
 }
 
@@ -146,11 +156,6 @@ pub struct ScheduleChunk {
     pub machines: Vec<MachineSchedule>,
 }
 impl ScheduleChunk {
-    fn empty(problem: &ProblemData) -> Self {
-        ScheduleChunk {
-            machines: vec![MachineSchedule::empty(); problem.machine_count_usize],
-        }
-    }
     fn add(&mut self, machine: usize, job: Job) {
         self.machines[machine].push(job)
     }
@@ -1163,7 +1168,11 @@ fn group_by_resource_amount(problem: &ProblemData) -> Grouping {
     );
     let len = 1.0 / group_size; // G
     let mut groups: Vec<Vec<Job>> = vec![vec![]; len as usize];
-    let mut wide_jobs: Vec<Job> = jobs.iter().filter(|job| problem.is_wide(job)).copied().collect();
+    let mut wide_jobs: Vec<Job> = jobs
+        .iter()
+        .filter(|job| problem.is_wide(job))
+        .copied()
+        .collect();
     let stack = wide_jobs.sort_by(|job0, job1| {
         job0.resource_amount
             .partial_cmp(&job1.resource_amount)
@@ -1191,9 +1200,9 @@ fn integral_schedule(
         machine_count_usize,
         ..
     } = *problem;
-    let mut s = Schedule::empty();
+    let mut s = Schedule::empty(problem);
 
-    let mut full_chunk = ScheduleChunk::empty(problem);
+    let mut full_chunk = s.make_chunk();
 
     let x_hat = GeneralizedSelection {
         configurations: x_bar
@@ -1227,7 +1236,7 @@ fn integral_schedule(
         let mut chunks: Vec<(ScheduleChunk, f64)> = configs
             .into_iter()
             .map(|(c, x_c)| {
-                let mut chunk = ScheduleChunk::empty(problem);
+                let mut chunk = s.make_chunk();
                 println!("  Adding config {:?} with x_c={}", c, x_c);
                 for (machine, job) in c
                     .jobs
