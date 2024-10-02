@@ -1,5 +1,8 @@
-use crate::algo::{Schedule, ScheduleChunk};
+use svg::node::element::path::Data;
+use svg::node::element::Path;
+use svg::Document;
 
+use crate::algo::{Schedule, ScheduleChunk};
 use std::{cmp::max, iter::repeat};
 
 const TICK: f64 = 0.5;
@@ -80,4 +83,22 @@ fn display_chunk(chunks: ScheduleChunk) -> String {
     }
 
     str
+}
+
+pub fn svg(schedule: Schedule) -> String {
+    let data = Data::new()
+        .move_to((10, 10))
+        .line_by((0, 50))
+        .line_by((50, 0))
+        .line_by((0, -50))
+        .close();
+
+    let path = Path::new()
+        .set("fill", "none")
+        .set("stroke", "black")
+        .set("stroke-width", 3)
+        .set("d", data);
+
+    let document = Document::new().set("viewBox", (0, 0, 70, 70)).add(path);
+    document.to_string()
 }

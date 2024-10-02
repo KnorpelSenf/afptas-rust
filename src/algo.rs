@@ -1163,6 +1163,12 @@ fn group_by_resource_amount(problem: &ProblemData) -> Grouping {
     );
     let len = 1.0 / group_size; // G
     let mut groups: Vec<Vec<Job>> = vec![vec![]; len as usize];
+    let mut wide_jobs: Vec<Job> = jobs.iter().filter(|job| problem.is_wide(job)).copied().collect();
+    let stack = wide_jobs.sort_by(|job0, job1| {
+        job0.resource_amount
+            .partial_cmp(&job1.resource_amount)
+            .expect("bad resource amount, cannot sort")
+    });
     for job in jobs.iter().filter(|job| problem.is_wide(job)).copied() {
         let r = job.resource_amount;
         let i = r % group_size;
@@ -1213,6 +1219,7 @@ fn integral_schedule(
     println!("Obtained {} window groups", window_groups.len());
 
     let mut groups = group_by_resource_amount(problem);
+    println!("{:?}", groups.groups);
     println!("Finding jobs");
     for (win, configs) in window_groups {
         println!("Looking at window {:?}", win);

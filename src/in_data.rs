@@ -13,20 +13,28 @@ use crate::algo::InstanceJob;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+    /// Solution accuracy
     #[arg(short, long)]
     epsilon: f64,
 
+    /// Number of machines
     #[arg(short, long)]
     machines: i32,
 
+    /// Resource limit
     #[arg(short, long)]
     resource_limit: f64,
 
+    /// Input CSV file containing jobs in the format "processing_time,resource_amount"
     #[arg(short, long)]
     job_file: String,
+
+    /// Render the schedule to an SVG file called "schedule.svg"
+    #[arg(long)]
+    svg: bool,
 }
 
-pub fn parse() -> Instance {
+pub fn parse() -> (bool, Instance) {
     let args = Args::parse();
     println!("Parsing input data");
 
@@ -77,10 +85,13 @@ pub fn parse() -> Instance {
         })
         .collect::<Vec<_>>();
 
-    Instance {
-        epsilon: args.epsilon,
-        machine_count: args.machines,
-        resource_limit: args.resource_limit,
-        jobs: Box::from(jobs),
-    }
+    (
+        args.svg,
+        Instance {
+            epsilon: args.epsilon,
+            machine_count: args.machines,
+            resource_limit: args.resource_limit,
+            jobs: Box::from(jobs),
+        },
+    )
 }
