@@ -1,5 +1,4 @@
-use crate::algo::Schedule;
-use crate::algo::ScheduleChunk;
+use crate::algo::{Schedule, ScheduleChunk};
 
 use std::{cmp::max, iter::repeat};
 
