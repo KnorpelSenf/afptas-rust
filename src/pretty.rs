@@ -1,11 +1,15 @@
-use svg::node::element::{Group, LinearGradient, Rectangle, Stop, Style, Text};
-use svg::node::Text as SvgText;
+use svg::node::element::{Group, LinearGradient, Rectangle, Stop, Style, Text, SVG};
 use svg::Document;
 
-use crate::algo::{Schedule, ScheduleChunk};
+use crate::algo::{Job, MachineSchedule, Schedule, ScheduleChunk};
 use std::{cmp::max, iter::repeat};
 
 const TICK: f64 = 0.5;
+
+const LEFT_MARGIN: usize = 50; // px
+const MACHINE_WIDTH: usize = 30; // px
+const MACHINE_HEIGHT_SCALE: usize = 20; // px for each unit of processing time
+const MACHINE_SPACING: usize = 10; // px
 
 pub fn pretty(schedule: Schedule) -> String {
     schedule
@@ -85,7 +89,7 @@ fn display_chunk(chunks: ScheduleChunk) -> String {
     str
 }
 
-pub fn svg(_schedule: Schedule) -> String {
+pub fn svg(schedule: Schedule) -> String {
     // Create the linear gradient for the background
     let gradient = LinearGradient::new()
         .set("id", "background")
@@ -101,61 +105,93 @@ pub fn svg(_schedule: Schedule) -> String {
         );
 
     // Create the SVG document
-    let doc = vec!["A", "B", "C"].iter().enumerate().fold(
-        Document::new()
-            .set("width", "100%")
-            .set("height", "100%")
-            .set("version", "1.1")
-            .set("xmlns", "http://www.w3.org/2000/svg")
-            .set("xmlns:svg", "http://www.w3.org/2000/svg")
-            .add(gradient)
-            .add(Style::new(
-                r#"
-text { font-family:monospace; font-size:12px; fill:black; }
+    let (document, _) = schedule.chunks.into_iter().fold(
+        (
+            Document::new()
+                .set("width", "100%")
+                .set("height", "100%")
+                .set("version", "1.1")
+                .set("xmlns", "http://www.w3.org/2000/svg")
+                .set("xmlns:svg", "http://www.w3.org/2000/svg")
+                .add(gradient)
+                .add(Style::new(
+                    r#"
+text { font-family:monospace; font-size:10px; fill:black; }
 #title { text-anchor:middle; font-size:20px; }
 .machine-box { fill:blue; stroke-width:1; stroke:black; }
 .machine-label { text-anchor:middle; dominant-baseline:middle; font-size:15px; }
 "#,
-            ))
-            // background
-            .add(
-                Rectangle::new()
-                    .set("x", 0)
-                    .set("y", 0)
-                    .set("width", "100%")
-                    .set("height", "100%")
-                    .set("fill", "url(#background)"),
-            )
-            // title
-            .add(
-                Text::new("Schedule")
-                    .set("id", "title")
-                    .set("x", "50%")
-                    .set("y", 24)
-                    .set("fill", "rgb(0,0,0)"),
-            ),
-        |doc, (i, label)| doc.add(create_machine(label, 10, 10 + 11 * i)),
+                ))
+                // background
+                .add(
+                    Rectangle::new()
+                        .set("x", 0)
+                        .set("y", 0)
+                        .set("width", "100%")
+                        .set("height", "100%")
+                        .set("fill", "url(#background)"),
+                )
+                // title
+                .add(
+                    Text::new("Schedule")
+                        .set("id", "title")
+                        .set("x", "50%")
+                        .set("y", 24)
+                        .set("fill", "rgb(0,0,0)"),
+                ),
+            30, // initial vertical offset
+        ),
+        |(doc, off), chunk| add_chunk_to_doc(doc, off, chunk),
     );
 
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 {}"#,
-        doc.to_string()
+        document.to_string()
     )
 }
 
-fn create_machine(name: &str, x: usize, y: usize) -> Group {
+fn add_chunk_to_doc(document: SVG, vertical_offset: usize, chunk: ScheduleChunk) -> (SVG, usize) {
+    chunk.machines.into_iter().enumerate().fold(
+        (document, vertical_offset),
+        |(doc, max_height), (machine, schedule)| {
+            let x = LEFT_MARGIN + machine * (MACHINE_WIDTH + MACHINE_SPACING);
+            let y = vertical_offset;
+            let (svg, height) = add_machine_to_doc(doc, x, y, schedule);
+            (svg, max(height, max_height))
+        },
+    )
+}
+
+fn add_machine_to_doc(
+    document: SVG,
+    x: usize,
+    y: usize,
+    machine_schedule: MachineSchedule,
+) -> (SVG, usize) {
+    machine_schedule
+        .jobs
+        .into_iter()
+        .fold((document, y), |(doc, off), job| {
+            let (element, h) = create_machine(job, x, off);
+            (doc.add(element), off + h)
+        })
+}
+
+fn create_machine(job: Job, x: usize, y: usize) -> (Group, usize) {
+    let w = MACHINE_WIDTH;
+    let h = MACHINE_HEIGHT_SCALE * job.processing_time as usize;
     let machine_box = Rectangle::new()
-        .set("x", format!("{}%", x))
-        .set("y", format!("{}%", y))
-        .set("width", "10%")
-        .set("height", "10%")
+        .set("x", x)
+        .set("y", y)
+        .set("width", w)
+        .set("height", h)
         .set("class", "machine-box");
 
-    let machine_label = Text::new(name)
-        .set("x", format!("{}%", x + 5)) // Centered on the rectangle
-        .set("y", format!("{}%", y + 5)) // Centered on the rectangle
+    let machine_label = Text::new(job.id.to_string())
+        .set("x", x + w / 2)
+        .set("y", y + h / 2) // Centered on the rectangle
         .set("class", "machine-label");
 
-    Group::new().add(machine_box).add(machine_label)
+    (Group::new().add(machine_box).add(machine_label), h)
 }
