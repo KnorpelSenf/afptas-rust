@@ -7,7 +7,9 @@ use std::{cmp::max, iter::repeat};
 const TICK: f64 = 0.5;
 
 const LEFT_MARGIN: usize = 50; // px
-const MACHINE_WIDTH: usize = 30; // px
+const TOP_HEADER_MARGIN: usize = 50; // px
+const TOP_MARGIN: usize = TOP_HEADER_MARGIN + 20; // px
+const MACHINE_WIDTH: usize = 100; // px
 const MACHINE_HEIGHT_SCALE: usize = 20; // px for each unit of processing time
 const MACHINE_SPACING: usize = 10; // px
 
@@ -104,45 +106,48 @@ pub fn svg(schedule: Schedule) -> String {
                 .set("offset", "95%"),
         );
 
-    // Create the SVG document
-    let (document, _) = schedule.chunks.into_iter().fold(
-        (
-            Document::new()
-                .set("width", "100%")
-                .set("height", "100%")
-                .set("version", "1.1")
-                .set("xmlns", "http://www.w3.org/2000/svg")
-                .set("xmlns:svg", "http://www.w3.org/2000/svg")
-                .add(gradient)
-                .add(Style::new(
-                    r#"
+    let chart = (0..schedule.machine_count).map(create_machine_header).fold(
+        Document::new()
+            .set("width", "100%")
+            .set("height", "100%")
+            .set("version", "1.1")
+            .set("xmlns", "http://www.w3.org/2000/svg")
+            .set("xmlns:svg", "http://www.w3.org/2000/svg")
+            .add(gradient)
+            .add(Style::new(
+                r#"
 text { font-family:monospace; font-size:10px; fill:black; }
-#title { text-anchor:middle; font-size:20px; }
+#title { text-anchor:middle; font-size:25px; }
+.machine-header { text-anchor:middle; font-size:17px; }
 .machine-box { fill:blue; stroke-width:1; stroke:black; }
 .machine-label { text-anchor:middle; dominant-baseline:middle; font-size:15px; }
 "#,
-                ))
-                // background
-                .add(
-                    Rectangle::new()
-                        .set("x", 0)
-                        .set("y", 0)
-                        .set("width", "100%")
-                        .set("height", "100%")
-                        .set("fill", "url(#background)"),
-                )
-                // title
-                .add(
-                    Text::new("Schedule")
-                        .set("id", "title")
-                        .set("x", "50%")
-                        .set("y", 24)
-                        .set("fill", "rgb(0,0,0)"),
-                ),
-            30, // initial vertical offset
-        ),
-        |(doc, off), chunk| add_chunk_to_doc(doc, off, chunk),
+            ))
+            // background
+            .add(
+                Rectangle::new()
+                    .set("x", 0)
+                    .set("y", 0)
+                    .set("width", "100%")
+                    .set("height", "100%")
+                    .set("fill", "url(#background)"),
+            )
+            // title
+            .add(
+                Text::new("Schedule")
+                    .set("id", "title")
+                    .set("x", "50%")
+                    .set("y", 24),
+            ),
+        |doc, header| doc.add(header),
     );
+    // Create the SVG document
+    let (document, _) = schedule
+        .chunks
+        .into_iter()
+        .fold((chart, TOP_MARGIN), |(doc, off), chunk| {
+            add_chunk_to_doc(doc, off, chunk)
+        });
 
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="no"?>
@@ -176,6 +181,17 @@ fn add_machine_to_doc(
             let (element, h) = create_machine(job, x, off);
             (doc.add(element), off + h)
         })
+}
+
+fn create_machine_header(i: usize) -> Text {
+    let x = LEFT_MARGIN + i * (MACHINE_WIDTH + MACHINE_SPACING) + (MACHINE_WIDTH / 2);
+    let y = TOP_HEADER_MARGIN;
+    Text::new(format!("Machine {i}"))
+        .set("x", x)
+        .set("y", y)
+        .set("width", "100%")
+        .set("height", "100%")
+        .set("class", "machine-header")
 }
 
 fn create_machine(job: Job, x: usize, y: usize) -> (Group, usize) {
