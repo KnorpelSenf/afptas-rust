@@ -5,5 +5,8 @@
   "rust-analyzer.linkedProjects": ["./Cargo.toml"],
   "[python]": {
     "editor.defaultFormatter": "ms-python.autopep8"
+  },
+  "[svg]": {
+    "editor.defaultFormatter": "DotJoshJohnson.xml"
   }
 }

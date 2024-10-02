@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<svg width="100%" height="100%" version="1.1"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+   <defs>
+      <linearGradient id="background" y1="0" y2="1" x1="0" x2="0">
+         <stop stop-color="#eeeeee" offset="5%"/>
+         <stop stop-color="#b0b0ee" offset="95%"/>
+      </linearGradient>
+   </defs>
+   <style type="text/css">
+text { font-family:monospace; font-size:12px; fill:black; }
+#title { text-anchor:middle; font-size:20px; }
+.machine-box { fill:blue;stroke-width:1;stroke:black; }
+.machine-label { text-anchor:middle; dominant-baseline:middle; font-size:15px; }
+   </style>
+   <rect x="0" y="0" width="100%" height="100%" fill="url(#background)"/>
+   <text id="title" fill="rgb(0,0,0)" x="50%" y="24">Schedule</text>
+   <g>
+      <rect x="10%" y="10%" width="10%" height="10%" class="machine-box" />
+      <text x="15%" y="15%" width="100%" height="100%" class="machine-label">Machine A</text>
+   </g>
+   <g>
+      <rect x="10%" y="21%" width="10%" height="10%" class="machine-box" />
+      <text x="15%" y="26%" width="100%" height="100%" class="machine-label">Machine B</text>
+   </g>
+   <g>
+      <rect x="10%" y="32%" width="10%" height="10%" class="machine-box" />
+      <text x="15%" y="37%" width="100%" height="100%" class="machine-label">Machine C</text>
+   </g>
+</svg>
