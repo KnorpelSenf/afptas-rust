@@ -251,7 +251,6 @@ fn create_machine(resource_limit: f64, job: Job, x: usize, y: usize) -> (Group, 
 }
 
 fn create_time_scale(height: usize) -> Group {
-    println!("time scale for {height}");
     (0..height / MACHINE_HEIGHT_SCALE)
         .map(|t| {
             let scaled_t = t * MACHINE_HEIGHT_SCALE;
@@ -286,7 +285,6 @@ fn create_time_scale(height: usize) -> Group {
 }
 
 fn create_line(x: usize, y: usize, w: usize, h: usize) -> Path {
-    println!("Line {x}/{y} -> {w} v {h}");
     Path::new()
         .set("fill", "none")
         .set("stroke", "black")
