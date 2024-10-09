@@ -181,10 +181,12 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
         .iter()
         .partition(|job| problem_data.is_wide(job));
     println!(
-        "Computing schedule from {} wide and {} narrow jobs",
+        "Computing schedule from {} wide and {} narrow jobs:",
         wide_jobs.len(),
         narrow_jobs.len()
     );
+    println!("Wide jobs are: {:?}", wide_jobs);
+    println!("Narrow jobs are: {:?}", narrow_jobs);
 
     let job_len = problem_data.jobs.len();
     let x = max_min(&problem_data);
@@ -202,93 +204,8 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
         &x_tilde,
     );
     let (x_bar, y_bar) = reduce_resource_amounts(&problem_data, &x_tilde, &y_tilde);
-    // println!("x_bar entries:");
-    // println!("{:#?}", x_bar.configurations);
-    // println!("y_bar entries are:");
-    // println!("{:#?}", y_bar.processing_times);
-
     integral_schedule(&problem_data, x_bar, y_bar)
 }
-
-// fn create_i_sup(wide_jobs: Vec<Job>, problem_data: &ProblemData) -> (Vec<Vec<Job>>, Vec<Job>) {
-//     println!("Computing I_sup from {} wide jobs", wide_jobs.len());
-//     let ProblemData {
-//         epsilon_prime_squared,
-//         ..
-//     } = problem_data;
-//     let p_w: f64 = wide_jobs.iter().map(|job| job.processing_time).sum();
-//     let step = epsilon_prime_squared * p_w;
-//     let mut job_ids = (wide_jobs.last().expect("no jobs").id + 1)..;
-//     let groups = linear_grouping(step, &wide_jobs);
-//     let additional_jobs = groups
-//         .iter()
-//         .map(|group| {
-//             let resource_amount = group.iter().max().expect("empty group").resource_amount;
-//             Job {
-//                 id: job_ids.next().unwrap(),
-//                 processing_time: step,
-//                 resource_amount,
-//             }
-//         })
-//         .collect::<Vec<_>>();
-//     println!(
-//         "Obtained I_sup with {} additional jobs, totalling {} jobs",
-//         additional_jobs.len(),
-//         wide_jobs.len() + additional_jobs.len(),
-//     );
-//     (groups, [wide_jobs, additional_jobs].concat())
-// }
-
-// fn linear_grouping(step: f64, jobs: &Vec<Job>) -> Vec<Vec<Job>> {
-//     let n = jobs.len();
-//     println!("Grouping {} jobs: {jobs:?}", n);
-//     // FIXME: Add special handling for the last group since we already know that
-//     // all remaining jobs will be put into it. Due to floating point
-//     // imprecision, it might happen that we accidentally open one group to many,
-//     // containing a single job only, having the size of the floating point
-//     // rounding error.
-//     if n == 0 {
-//         return vec![];
-//     }
-//     let mut job_ids = 0..;
-
-//     let mut groups: Vec<Vec<Job>> = vec![];
-//     let mut current_group: Vec<Job> = vec![];
-//     let mut current_processing_time = 0.0f64;
-//     for job in jobs.iter() {
-//         let mut remaining_processing_time = job.processing_time;
-//         loop {
-//             let remaining_space = (groups.len() + 1) as f64 * step - current_processing_time;
-//             // Handle last iteration if the job fits entirely
-//             if remaining_processing_time <= remaining_space {
-//                 let new_job = Job {
-//                     id: job_ids.next().unwrap(),
-//                     processing_time: remaining_processing_time,
-//                     resource_amount: job.resource_amount,
-//                 };
-//                 current_processing_time += remaining_processing_time;
-//                 current_group.push(new_job);
-//                 break;
-//             }
-
-//             // Split off a bit of the job for the current group
-//             let new_job = Job {
-//                 id: job_ids.next().unwrap(),
-//                 processing_time: remaining_space,
-//                 resource_amount: job.resource_amount,
-//             };
-//             current_group.push(new_job);
-//             groups.push(current_group);
-
-//             current_group = vec![];
-
-//             current_processing_time += remaining_space;
-//             remaining_processing_time -= remaining_space;
-//         }
-//     }
-//     println!("Obtained {} groups", groups.len());
-//     groups
-// }
 
 #[derive(Clone)]
 struct Configuration {
