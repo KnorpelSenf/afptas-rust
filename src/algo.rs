@@ -782,10 +782,9 @@ struct NarrowJobSelection {
     windex: HashMap<Window, HashSet<Job>>,
 }
 impl NarrowJobSelection {
-    fn get_jobs_by_window(&self, window: &Window) -> Vec<(Job, f64)> {
-        let set = self.windex.get(window);
-        let window = *window;
-        if let Some(jobs) = set {
+    fn get_jobs_by_window(&self, win: &Window) -> Vec<(Job, f64)> {
+        let window = *win;
+        if let Some(jobs) = self.windex.get(win) {
             jobs.iter()
                 .copied()
                 .map(|job| {
@@ -802,6 +801,21 @@ impl NarrowJobSelection {
         } else {
             vec![]
         }
+    }
+    fn find_max_occurrences(self) -> HashMap<Window, Vec<(Job, f64)>> {
+        let mut max = HashMap::new();
+        for (config, p) in self.processing_times {
+            let current = max.entry(config.narrow_job).or_insert((config.window, p));
+            if current.1 < p {
+                current.0 = config.window;
+                current.1 = p;
+            }
+        }
+        max.into_iter()
+            .fold(HashMap::new(), |mut agg, (job, (window, p))| {
+                agg.entry(window).or_insert(vec![]).push((job, p));
+                agg
+            })
     }
     fn add(&mut self, config: NarrowJobConfiguration, processing_time: f64) {
         *self.processing_times.entry(config).or_insert(0.0) += processing_time;
@@ -1131,6 +1145,7 @@ fn integral_schedule(
 
     let mut full_chunk = s.make_chunk();
 
+    // Add p_max everywhere
     let x_hat = GeneralizedSelection {
         configurations: x_bar
             .configurations
@@ -1139,6 +1154,7 @@ fn integral_schedule(
             .collect(),
     };
 
+    // Group wide jobs by windows
     println!(
         "Grouping {} entries in x_hat by windows",
         x_hat.configurations.len()
@@ -1154,11 +1170,14 @@ fn integral_schedule(
         });
     println!("Obtained {} window groups", window_groups.len());
 
+    let narrow_jobs_by_window = y_bar.find_max_occurrences();
+
+    // Put wide jobs into chunks
     let mut groups = group_by_resource_amount(problem);
     println!("{:?}", groups.groups);
     println!("Finding jobs");
     for (win, configs) in window_groups {
-        println!("Looking at window {:?}", win);
+        println!("+++ Looking at window {:?}", win);
         println!("Creating chunks with wide jobs");
         let mut chunks: Vec<(ScheduleChunk, f64)> = configs
             .into_iter()
@@ -1184,8 +1203,11 @@ fn integral_schedule(
             .collect();
         println!("Done creating {} chunks with wide jobs", chunks.len());
 
+        // Put narrow jobs into windows
         println!("Adding narrow jobs");
-        let mut narrow_jobs = y_bar.get_jobs_by_window(&win);
+
+        let mut narrow_jobs = narrow_jobs_by_window.get(&win).unwrap_or(&vec![]).clone();
+        let narrow_job_count = narrow_jobs.len();
         narrow_jobs.sort_by(|(job0, _), (job1, _)| {
             job0.resource_amount
                 .partial_cmp(&job1.resource_amount)
@@ -1201,7 +1223,10 @@ fn integral_schedule(
         let mut target_chunk = 0;
         let mut target_machine = machine_count_usize - 1;
         for (job, p) in narrow_jobs {
-            println!("  Looking at {:?} with p={p}: {}", job, job.processing_time);
+            println!(
+                "  Looking at {:?} with processing time {} which is scheduled for {}",
+                job, job.processing_time, p
+            );
             if job.processing_time < p {
                 println!("  Adding {:?} to 0 (full chunk)", job);
                 full_chunk.add(0, job)
@@ -1221,6 +1246,7 @@ fn integral_schedule(
                 used_processing_time += job.processing_time;
             }
         }
+        println!("Done adding {narrow_job_count} narrow jobs");
         s.push_all(chunks.into_iter().map(|(chunk, _)| chunk).collect());
         println!("Done looking at window {:?}", win);
     }
