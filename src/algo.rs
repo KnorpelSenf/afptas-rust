@@ -1182,12 +1182,18 @@ fn integral_schedule(
                 .expect("bad resource amount, cannot sort")
                 .reverse() // sort by decreasing resource amount
         });
+        println!(
+            "Found jobs {:?} for window {:?}",
+            narrow_jobs.iter().map(|pair| pair.0).collect::<Vec<_>>(),
+            win
+        );
         let mut used_processing_time = 0.0;
         let mut target_chunk = 0;
         let mut target_machine = machine_count_usize - 1;
-        println!("  Starting at machine {target_machine}");
         for (job, p) in narrow_jobs {
-            if job.processing_time != p {
+            println!("  Looking at {:?} with p={p}: {}", job, job.processing_time);
+            if job.processing_time < p {
+                println!("  Adding {:?} to 0 (full chunk)", job);
                 full_chunk.add(0, job)
             } else {
                 if used_processing_time + job.processing_time > chunks[target_chunk].1 {
