@@ -1061,12 +1061,11 @@ fn group_by_machine_count(
 }
 
 struct Grouping {
-    group_size: f64,
     groups: Vec<(usize, Vec<Job>)>,
     map: HashMap<Job, usize>,
 }
 impl Grouping {
-    fn new(problem: &ProblemData, groups: Vec<Vec<Job>>) -> Self {
+    fn new(groups: Vec<Vec<Job>>) -> Self {
         let mut map = HashMap::new();
         for (i, group) in groups.iter().enumerate() {
             for job in group {
@@ -1075,7 +1074,6 @@ impl Grouping {
         }
 
         Grouping {
-            group_size: problem.one_over_epsilon_prime as f64,
             groups: groups.into_iter().map(|group| (0, group)).collect(),
             map,
         }
@@ -1125,7 +1123,7 @@ fn group_by_resource_amount(problem: &ProblemData) -> Grouping {
         }
     }
 
-    let g = Grouping::new(problem, groups);
+    let g = Grouping::new(groups);
     println!("Created {} groups", g.groups.len());
     g
 }
@@ -1205,7 +1203,6 @@ fn integral_schedule(
 
         // Put narrow jobs into windows
         println!("Adding narrow jobs");
-
         let mut narrow_jobs = narrow_jobs_by_window.get(&win).unwrap_or(&vec![]).clone();
         let narrow_job_count = narrow_jobs.len();
         narrow_jobs.sort_by(|(job0, _), (job1, _)| {
