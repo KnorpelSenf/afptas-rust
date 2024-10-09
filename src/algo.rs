@@ -1049,23 +1049,27 @@ fn group_by_machine_count(
 struct Grouping {
     group_size: f64,
     groups: Vec<(usize, Vec<Job>)>,
+    map: HashMap<Job, usize>,
 }
 impl Grouping {
     fn new(problem: &ProblemData, groups: Vec<Vec<Job>>) -> Self {
+        let mut map = HashMap::new();
+        for (i, group) in groups.iter().enumerate() {
+            for job in group {
+                map.insert(job.clone(), i);
+            }
+        }
+
         Grouping {
             group_size: problem.one_over_epsilon_prime as f64,
             groups: groups.into_iter().map(|group| (0, group)).collect(),
+            map,
         }
     }
     fn next(&mut self, job: Job) -> Option<Job> {
-        let i = (job.resource_amount % self.group_size) as usize;
-        if self.groups.len() <= i {
-            return None;
-        }
-        if self.groups[i].0 == self.groups[i].1.len() {
-            return None;
-        }
-        let res = self.groups[i].1[self.groups[i].0];
+        let i = *self.map.get(&job)?;
+        let group = self.groups.get(i)?;
+        let res = *group.1.get(group.0)?;
         self.groups[i].0 += 1;
         Some(res)
     }
@@ -1090,15 +1094,21 @@ fn group_by_resource_amount(problem: &ProblemData) -> Grouping {
         .filter(|job| problem.is_wide(job))
         .copied()
         .collect();
-    let stack = wide_jobs.sort_by(|job0, job1| {
+    wide_jobs.sort_by(|job0, job1| {
         job0.resource_amount
             .partial_cmp(&job1.resource_amount)
             .expect("bad resource amount, cannot sort")
     });
-    for job in jobs.iter().filter(|job| problem.is_wide(job)).copied() {
-        let r = job.resource_amount;
-        let i = r % group_size;
-        groups[i as usize].push(job)
+    let p_w: f64 = wide_jobs.iter().map(|job| job.processing_time).sum();
+    let mut current_p = 0.0;
+    let mut current_i: usize = 0;
+
+    for job in wide_jobs {
+        groups[current_i].push(job);
+        current_p += job.processing_time;
+        if current_p >= ((current_i + 1) as f64) * group_size * p_w {
+            current_i = (current_p / (group_size * p_w)) as usize;
+        }
     }
 
     let g = Grouping::new(problem, groups);
