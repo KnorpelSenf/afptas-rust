@@ -1,5 +1,6 @@
 use colors_transform::{Color, Hsl};
-use svg::node::element::{Group, LinearGradient, Rectangle, Stop, Style, Text, Title, SVG};
+use svg::node::element::path::Data;
+use svg::node::element::{Group, LinearGradient, Path, Rectangle, Stop, Style, Text, Title, SVG};
 use svg::Document;
 
 use crate::algo::{Job, MachineSchedule, Schedule, ScheduleChunk};
@@ -7,7 +8,8 @@ use std::{cmp::max, iter::repeat};
 
 const TICK: f64 = 0.5;
 
-const LEFT_MARGIN: usize = 50; // px
+const SCALE_MARGIN: usize = 50; // px
+const LEFT_MARGIN: usize = SCALE_MARGIN + 20; // px
 const TOP_HEADER_MARGIN: usize = 50; // px
 const TOP_MARGIN: usize = TOP_HEADER_MARGIN + 20; // px
 const RIGHT_MARGIN: usize = 30; // px
@@ -122,6 +124,7 @@ text { font-family:monospace; font-size:10px; fill:black; }
 .machine-header { text-anchor:middle; font-size:17px; }
 .machine-box { stroke-width:1; stroke:black; }
 .machine-label { text-anchor:middle; dominant-baseline:middle; font-size:15px; }
+.scale-label { text-anchor:end; dominant-baseline:middle; font-size:10px; }
 "#,
             ))
             // background
@@ -151,6 +154,7 @@ text { font-family:monospace; font-size:10px; fill:black; }
         });
 
     let body = document
+        .add(create_time_scale(height))
         .set(
             "width",
             LEFT_MARGIN + schedule.machine_count * (MACHINE_WIDTH + MACHINE_SPACING)
@@ -233,7 +237,7 @@ fn create_machine(resource_limit: f64, job: Job, x: usize, y: usize) -> (Group, 
         .set("class", "machine-label");
 
     let tooltip = Title::new(format!(
-        "Job {} (p={}, r={})",
+        "Job {}\n\nprocessing time: {} s\nresource amount: {}",
         job.id, job.processing_time, job.resource_amount
     ));
 
@@ -244,4 +248,48 @@ fn create_machine(resource_limit: f64, job: Job, x: usize, y: usize) -> (Group, 
             .add(tooltip),
         h,
     )
+}
+
+fn create_time_scale(height: usize) -> Group {
+    println!("time scale for {height}");
+    (0..height / MACHINE_HEIGHT_SCALE)
+        .map(|t| {
+            let scaled_t = t * MACHINE_HEIGHT_SCALE;
+            let is_big = scaled_t % (5 * MACHINE_HEIGHT_SCALE) == 0;
+            let width = if is_big { 10 } else { 5 };
+            let line = Group::new().add(create_line(
+                SCALE_MARGIN - width,
+                TOP_MARGIN + scaled_t,
+                width,
+                0,
+            ));
+            if is_big {
+                line.add(
+                    Text::new(t.to_string())
+                        .set("x", SCALE_MARGIN - 15)
+                        .set("y", TOP_MARGIN + scaled_t)
+                        .set("class", "scale-label"),
+                )
+            } else {
+                line
+            }
+        })
+        .fold(
+            Group::new().add(create_line(
+                SCALE_MARGIN,
+                TOP_MARGIN,
+                0,
+                height - TOP_MARGIN,
+            )),
+            |group, line| group.add(line),
+        )
+}
+
+fn create_line(x: usize, y: usize, w: usize, h: usize) -> Path {
+    println!("Line {x}/{y} -> {w} v {h}");
+    Path::new()
+        .set("fill", "none")
+        .set("stroke", "black")
+        .set("stroke-width", 2)
+        .set("d", Data::new().move_to((x, y)).line_by((w, h)))
 }
