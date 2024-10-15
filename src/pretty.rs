@@ -15,7 +15,7 @@ const TOP_MARGIN: usize = TOP_HEADER_MARGIN + 20; // px
 const RIGHT_MARGIN: usize = 30; // px
 const BOTTOM_MARGIN: usize = 20; // px
 const MACHINE_WIDTH: usize = 100; // px
-const MACHINE_HEIGHT_SCALE: usize = 20; // px for each unit of processing time
+const MACHINE_HEIGHT_SCALE: usize = 15; // px for each unit of processing time
 const MACHINE_SPACING: usize = 10; // px
 
 pub fn pretty(schedule: Schedule) -> String {
