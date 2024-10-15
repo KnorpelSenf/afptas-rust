@@ -19,7 +19,7 @@ pub struct Instance {
     pub resource_limit: f64,
     pub jobs: Box<Vec<InstanceJob>>,
 }
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct InstanceJob {
     pub processing_time: f64,
     pub resource_amount: f64,

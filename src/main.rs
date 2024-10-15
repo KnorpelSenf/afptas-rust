@@ -6,6 +6,8 @@ use std::fs::File;
 use std::io::Write;
 use std::time::Instant;
 
+use algo::{InstanceJob, Job, Schedule};
+
 use crate::algo::{compute_schedule, Instance};
 use crate::in_data::parse;
 use crate::pretty::{display, pretty, svg};
@@ -22,9 +24,13 @@ fn main() {
     let job_count = jobs.len();
     println!("Scheduling {job_count} jobs on {machine_count} machines with a resource limit of {resource_limit} with epsilon={epsilon} close to OPT");
 
+    let job_backup = jobs.clone();
     let start = Instant::now();
     let schedule = compute_schedule(instance);
     let duration = start.elapsed();
+
+    println!("Asserting that all jobs are scheduled");
+    compare_jobs_before_and_after_schedule(job_backup, schedule.clone());
 
     println!("Done in {:?}.", duration);
     if to_svg {
@@ -41,4 +47,56 @@ fn main() {
         println!("{}", display(schedule));
         println!("{machine_count} machines.");
     }
+}
+
+fn compare_jobs_before_and_after_schedule(mut jobs: Box<Vec<InstanceJob>>, schedule: Schedule) {
+    let mut scheduled_jobs: Vec<Job> = schedule
+        .chunks
+        .into_iter()
+        .flat_map(|chunk| {
+            chunk
+                .machines
+                .into_iter()
+                .flat_map(|machine| machine.jobs.into_iter())
+        })
+        .collect();
+
+    assert!(
+        jobs.len() == scheduled_jobs.len(),
+        "number of jobs was {} but the schedule contained {} jobs",
+        jobs.len(),
+        scheduled_jobs.len(),
+    );
+
+    jobs.sort_by(|job0, job1| {
+        job0.resource_amount
+            .partial_cmp(&job1.resource_amount)
+            .expect("cannot compare bad processing time")
+    });
+    jobs.sort_by(|job0, job1| {
+        job0.processing_time
+            .partial_cmp(&job1.processing_time)
+            .expect("cannot compare bad processing time")
+    });
+
+    scheduled_jobs.sort_by(|job0, job1| {
+        job0.resource_amount
+            .partial_cmp(&job1.resource_amount)
+            .expect("cannot compare bad processing time")
+    });
+    scheduled_jobs.sort_by(|job0, job1| {
+        job0.processing_time
+            .partial_cmp(&job1.processing_time)
+            .expect("cannot compare bad processing time")
+    });
+
+    assert!(
+        jobs.iter()
+            .zip(scheduled_jobs)
+            .all(
+                |(job, scheduled_job)| job.resource_amount == scheduled_job.resource_amount
+                    && job.processing_time == scheduled_job.processing_time
+            ),
+        "scheduled jobs differ in resource amount or processing time!"
+    );
 }
