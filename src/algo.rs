@@ -660,6 +660,10 @@ struct Window {
     machine_count: i32,
 }
 impl Window {
+    fn is_full(&self, problem: &ProblemData) -> bool {
+        self.machine_count == problem.machine_count
+            && self.resource_amount == problem.resource_limit
+    }
     fn empty() -> Self {
         Window {
             resource_amount: 0.0,
@@ -906,21 +910,21 @@ fn reduce_resource_amounts(
                                         "    Adding narrow jobs from K_ik by window {:?}",
                                         k_ik.window
                                     );
-                                    y_tilde.get_jobs_by_window(&k_ik.window).iter().for_each(
-                                        |(narrow_job, amount)| {
-                                            println!(
-                                                "      Adding {:?} with amount={amount}",
-                                                narrow_job
-                                            );
-                                            narrow_sel.add(
-                                                NarrowJobConfiguration {
-                                                    narrow_job: *narrow_job,
-                                                    window,
-                                                },
-                                                *amount,
-                                            );
-                                        },
-                                    );
+                                    for (narrow_job, amount) in
+                                        y_tilde.get_jobs_by_window(&k_ik.window).iter()
+                                    {
+                                        println!(
+                                            "      Adding {:?} with amount={amount}",
+                                            narrow_job
+                                        );
+                                        narrow_sel.add(
+                                            NarrowJobConfiguration {
+                                                narrow_job: *narrow_job,
+                                                window,
+                                            },
+                                            *amount,
+                                        );
+                                    }
 
                                     k_ik.configuration.processing_time
                                 })
