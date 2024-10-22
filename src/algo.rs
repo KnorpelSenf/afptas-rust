@@ -613,6 +613,7 @@ impl Ilp {
 fn reduce_to_basic_solution(x: Selection) -> Selection {
     println!("Reducing to basic solution");
     // TODO: implement
+    println!("Done reducing to basic solution");
     x
 }
 
