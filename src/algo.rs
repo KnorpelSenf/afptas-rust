@@ -1030,18 +1030,15 @@ fn group_by_machine_count(
     println!("Creating {k_len} sets");
     // List of K_i sets with pre-computed P_pre(K_i) per set, where i+1 than the number of machines
     let mut k: Vec<(f64, GeneralizedSelection)> = vec![(0.0, GeneralizedSelection::empty()); k_len];
+    // TODO: this also has to happen for the last window (R,m), which should be
+    // x_bar(emptyset, (R,m)) = x_tilde(emptyset, (R,m)) + epsilon_prime * P_pre
     let mut p_pre = 0.0;
-    for (c, x_c) in x_tilde
-        .configurations
-        .iter()
-        .filter(|(c, _)| c.configuration.machine_count > 0)
-    {
-        let i = c.configuration.machine_count as usize;
+    for (c, x_c) in x_tilde.configurations.iter() {
+        let group = c.configuration.machine_count as usize;
         println!(
-            "{i} machines used in config {:?} which was selected {x_c}",
+            "{group} machines used in config {:?} which was selected {x_c}",
             c
         );
-        let group = i - 1;
         p_pre += x_c;
         k[group].0 += x_c;
         k[group].1.push(c.clone(), *x_c);
