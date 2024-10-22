@@ -934,36 +934,34 @@ fn reduce_resource_amounts(
                             println!("    Next window will be {:?}", c.window);
 
                             println!("    Adding narrow jobs by window {:?}", window);
-                            y_tilde.get_jobs_by_window(&window).iter().for_each(
-                                |(narrow_job, amount)| {
-                                    println!(
-                                        "      Adding {:?} with amount={} to current window",
-                                        narrow_job,
-                                        *amount * phi_up
-                                    );
-                                    narrow_sel.add(
-                                        NarrowJobConfiguration {
-                                            narrow_job: *narrow_job,
-                                            window,
-                                        },
-                                        *amount * phi_up,
-                                    );
-                                    // TODO: this also has to happen for the last window (R,m), which should be
-                                    // x_bar(emptyset, (R,m)) = x_tilde(emptyset, (R,m)) + epsilon_prime * P_pre
-                                    println!(
-                                        "      Adding {:?} with amount={} to next window",
-                                        narrow_job,
-                                        *amount * phi_down
-                                    );
-                                    narrow_sel.add(
-                                        NarrowJobConfiguration {
-                                            narrow_job: *narrow_job,
-                                            window: next_window,
-                                        },
-                                        *amount * phi_down,
-                                    );
-                                },
-                            );
+                            for (narrow_job, amount) in y_tilde.get_jobs_by_window(&window).iter() {
+                                println!(
+                                    "      Adding {:?} with amount={} to current window",
+                                    narrow_job,
+                                    *amount * phi_up
+                                );
+                                narrow_sel.add(
+                                    NarrowJobConfiguration {
+                                        narrow_job: *narrow_job,
+                                        window,
+                                    },
+                                    *amount * phi_up,
+                                );
+                                // TODO: this also has to happen for the last window (R,m), which should be
+                                // x_bar(emptyset, (R,m)) = x_tilde(emptyset, (R,m)) + epsilon_prime * P_pre
+                                println!(
+                                    "      Adding {:?} with amount={} to next window",
+                                    narrow_job,
+                                    *amount * phi_down
+                                );
+                                narrow_sel.add(
+                                    NarrowJobConfiguration {
+                                        narrow_job: *narrow_job,
+                                        window: next_window,
+                                    },
+                                    *amount * phi_down,
+                                );
+                            }
 
                             let highest_cut = cur_step * step_width;
                             let p_diff = e_c - highest_cut;
@@ -1005,7 +1003,7 @@ fn reduce_resource_amounts(
 
     println!("Done creating {} stacks:", stacks.len());
     for (i, stack) in stacks.iter().enumerate() {
-        println!("  --- K_{} ---  ", i + 1);
+        println!("  --- K_{i} ---  ");
         for (config, x_c) in stack.configurations.iter() {
             println!("{:?}: {}", config, x_c);
         }
