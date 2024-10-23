@@ -1029,7 +1029,7 @@ fn group_by_machine_count(
     println!("Grouping by machine count");
     let m = problem.machine_count_usize;
     println!("m={} and 1/e'={}", m, problem.one_over_epsilon_prime);
-    let k_len = min(m, problem.one_over_epsilon_prime as usize - 1);
+    let k_len = min(m, problem.one_over_epsilon_prime as usize);
     println!("Creating {k_len} sets");
     // List of K_i sets with pre-computed P_pre(K_i) per set, where i+1 than the number of machines
     let mut k: Vec<(f64, GeneralizedSelection)> = vec![(0.0, GeneralizedSelection::empty()); k_len];
