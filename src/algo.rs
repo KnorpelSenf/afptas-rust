@@ -338,7 +338,7 @@ fn max_min(problem_data: &ProblemData) -> Selection {
     let m = jobs.len();
     let mut x = Selection::init((0..m).map(|i| {
         (
-            solve_block_problem_ilp(&unit(i, m), 0.5, &problem_data),
+            solve_block_problem_ilp(&unit(i, m), &problem_data),
             1.0 / m as f64,
         )
     }));
@@ -354,7 +354,7 @@ fn max_min(problem_data: &ProblemData) -> Selection {
         let price = compute_price(&fx, *epsilon_prime, theta);
         println!("++ Starting iteration with price {price:?}");
         // solve block problem
-        let config = solve_block_problem_ilp(&price, *epsilon_prime, &problem_data);
+        let config = solve_block_problem_ilp(&price, &problem_data);
         let y = Selection::single(config);
         println!("Received block problem solution {y:?}");
         let fy: Vec<f64> = jobs.iter().map(|job| f(job, &y)).collect();
@@ -434,18 +434,15 @@ fn print_gen_selection(job_len: usize, m: usize, r: f64, x: &GeneralizedSelectio
     }
 }
 
-fn solve_block_problem_ilp(
-    q: &Vec<f64>,
-    precision: f64,
-    problem_data: &ProblemData,
-) -> Configuration {
+fn solve_block_problem_ilp(q: &Vec<f64>, problem_data: &ProblemData) -> Configuration {
     let ProblemData {
         machine_count,
         resource_limit,
+        one_over_epsilon_prime,
         ref jobs,
         ..
     } = *problem_data;
-    let wide_job_max_count = (1.0 / precision) as i32;
+    let wide_job_max_count = one_over_epsilon_prime;
     let mut prob = Ilp::new(machine_count, resource_limit);
 
     let variables: Vec<(Job, Variable)> = jobs
