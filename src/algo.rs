@@ -1037,7 +1037,7 @@ fn group_by_machine_count(
     // x_bar(emptyset, (R,m)) = x_tilde(emptyset, (R,m)) + epsilon_prime * P_pre
     let mut p_pre = 0.0;
     for (c, x_c) in x_tilde.configurations.iter() {
-        let group = c.configuration.machine_count as usize;
+        let group = c.configuration.machine_count as usize - 1;
         println!(
             "{group} machines used in config {:?} which was selected {x_c}",
             c
