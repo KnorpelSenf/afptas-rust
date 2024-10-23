@@ -204,6 +204,7 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
         &x_tilde,
     );
     let (x_bar, y_bar) = reduce_resource_amounts(&problem_data, &x_tilde, &y_tilde);
+    // TODO: use x_bar, y_bar to find a basic solution to LP_w via simplex
     integral_schedule(&problem_data, x_bar, y_bar)
 }
 
@@ -612,7 +613,7 @@ impl Ilp {
 
 fn reduce_to_basic_solution(x: Selection) -> Selection {
     println!("Reducing to basic solution");
-    // TODO: implement
+    // TODO: put the output of this ILP_kkp into a simplex implementation in order to obtain a basic solution
     println!("Done reducing to basic solution");
     x
 }
@@ -1119,7 +1120,7 @@ fn group_by_resource_amount(problem: &ProblemData) -> Grouping {
         groups[current_i].push(job);
         current_p += job.processing_time;
         if current_p >= ((current_i + 1) as f64) * group_size * p_w {
-            current_i = (current_p / (group_size * p_w)) as usize;
+            current_i = min(groups.len() - 1, (current_p / (group_size * p_w)) as usize);
         }
     }
 
