@@ -2,7 +2,7 @@ mod algo;
 mod in_data;
 mod pretty;
 
-use std::fs::File;
+use std::fs::{create_dir_all, File};
 use std::io::Write;
 use std::time::Instant;
 
@@ -35,10 +35,14 @@ fn main() {
     println!("Done in {:?}.", duration);
     if to_svg {
         let file_data = svg(resource_limit, schedule);
-        let mut file = File::create("schedule.svg").expect("cannot create file schedule.svg");
+        create_dir_all("./schedules/").expect("cannot create directory ./schedules");
+        let path = format!(
+            "schedules/schedule_m-{machine_count}_eps-{epsilon}_res-{resource_limit}_jobs-{job_count}.svg"
+        );
+        let mut file = File::create(path.clone()).expect("cannot create file schedule.svg");
         file.write_all(file_data.as_bytes())
-            .expect("cannot write to file schedule.svg");
-        println!("Result is written to schedule.svg");
+            .expect(&format!("cannot write to file {path}"));
+        println!("Result is written to {path}");
     } else if job_count <= 1000 {
         println!("Result is (prettified):");
         println!("{}", pretty(schedule));
