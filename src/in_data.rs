@@ -91,7 +91,7 @@ pub fn parse() -> (bool, Instance) {
             epsilon: args.epsilon,
             machine_count: args.machines,
             resource_limit: args.resource_limit,
-            jobs: Box::from(jobs),
+            jobs,
         },
     )
 }
