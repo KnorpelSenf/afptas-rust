@@ -43,6 +43,11 @@ struct ProblemData {
     second_case: bool,
 }
 impl ProblemData {
+    fn is_wide(&self, job: &Job) -> bool {
+        self.second_case || job.resource_amount >= self.epsilon_prime_times_resource_limit
+    }
+}
+impl From<Instance> for ProblemData {
     fn from(instance: Instance) -> Self {
         let Instance {
             epsilon,
@@ -84,9 +89,6 @@ impl ProblemData {
             epsilon_prime_times_resource_limit: epsilon_prime * resource_limit,
             second_case: 1.0 / epsilon >= machine_count.into(),
         }
-    }
-    fn is_wide(&self, job: &Job) -> bool {
-        self.second_case || job.resource_amount >= self.epsilon_prime_times_resource_limit
     }
 }
 
