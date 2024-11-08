@@ -2,6 +2,7 @@ use good_lp::{
     constraint, default_solver, variable, variables, Expression, ProblemVariables, Solution,
     SolverModel, Variable,
 };
+use log::{debug, log_enabled, trace, Level::Trace};
 use std::{
     cmp::{max, min, Ordering},
     collections::{HashMap, HashSet},
@@ -182,23 +183,23 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
         .jobs
         .iter()
         .partition(|job| problem_data.is_wide(job));
-    println!(
+    debug!(
         "Computing schedule from {} wide and {} narrow jobs:",
         wide_jobs.len(),
         narrow_jobs.len()
     );
-    println!("Wide jobs are: {:?}", wide_jobs);
-    println!("Narrow jobs are: {:?}", narrow_jobs);
+    trace!("Wide jobs are: {:?}", wide_jobs);
+    trace!("Narrow jobs are: {:?}", narrow_jobs);
 
     let job_len = problem_data.jobs.len();
     let x = max_min(&problem_data);
-    println!("Max-min solved with:");
+    trace!("Max-min solved with:");
     print_selection(job_len, problem_data.machine_count_usize, &x);
     let x = reduce_to_basic_solution(x);
-    println!("Reduced the max-min solution min to:");
+    trace!("Reduced the max-min solution min to:");
     print_selection(job_len, problem_data.machine_count_usize, &x);
     let (x_tilde, y_tilde) = generalize(&problem_data, x);
-    println!("Generalized to:");
+    trace!("Generalized to:");
     print_gen_selection(
         job_len,
         problem_data.machine_count_usize,
@@ -328,7 +329,7 @@ fn unit(i: usize, m: usize) -> Vec<f64> {
 }
 
 fn max_min(problem_data: &ProblemData) -> Selection {
-    println!("Solving max-min");
+    debug!("Solving max-min");
     let ProblemData {
         epsilon,
         epsilon_squared,
@@ -337,7 +338,7 @@ fn max_min(problem_data: &ProblemData) -> Selection {
         ..
     } = problem_data;
     // compute initial solution;
-    println!("Computing initial solution");
+    debug!("Computing initial solution");
     let m = jobs.len();
     let mut x = Selection::init((0..m).map(|i| {
         (
@@ -345,91 +346,98 @@ fn max_min(problem_data: &ProblemData) -> Selection {
             1.0 / m as f64,
         )
     }));
-    println!("Initial value is {x:?}");
+    debug!("Done computing initial solution");
+    trace!("Initial value is {x:?}");
 
+    debug!("Iterating until v < {epsilon_prime} = epsilon_prime");
     // iterate
     loop {
         let fx: Vec<f64> = jobs.iter().map(|job| f(job, &x)).collect();
-        println!("f(x) = {fx:?}");
+        trace!("f(x) = {fx:?}");
         // price vector
         let prec = epsilon_squared / (m as f64);
         let theta = find_theta(*epsilon_prime, &fx, prec);
         let price = compute_price(&fx, *epsilon_prime, theta);
-        println!("++ Starting iteration with price {price:?}");
+        trace!("++ Starting iteration with price {price:?}");
         // solve block problem
         let config = solve_block_problem_ilp(&price, &problem_data);
         let y = Selection::single(config);
-        println!("Received block problem solution {y:?}");
+        trace!("Received block problem solution {y:?}");
         let fy: Vec<f64> = jobs.iter().map(|job| f(job, &y)).collect();
-        println!("f(y) = {fy:?}");
+        trace!("f(y) = {fy:?}");
 
         // compute v
         let v = compute_v(&price, &fx, &fy);
-        println!("v = {v}");
+        debug!("v = {v}");
         if v < *epsilon_prime {
             let λ_hat = fx
                 .iter()
                 .min_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
                 .unwrap_or(&1.0);
-            println!("λ^ = {}", λ_hat);
+            debug!("λ^ = {}", λ_hat);
             x.scale(1.0 / λ_hat);
             break;
         }
         // update solution = ((1-tau) * solution) + (tau * solution)
         let tau = line_search(&fx, &fy, theta, *epsilon_prime, *epsilon);
         x.interpolate(y, tau);
-        println!(
+        trace!(
             "Updated solution with step length tau={} to be {:?}",
-            tau, x
+            tau,
+            x
         );
     }
     x
 }
 fn print_selection(job_len: usize, m: usize, x: &Selection) {
-    let digits_per_job_id = (job_len - 1).to_string().len();
-    let lcol = max(4, digits_per_job_id * m);
-    println!("{: >lcol$} | Length", "Jobs");
-    println!("{:->lcol$}---{}", "-", "-".repeat(19));
-    for (c, x_c) in x.0.iter() {
-        let job_ids = c
-            .jobs
-            .iter()
-            .map(|job| {
-                format!("{: >digits_per_job_id$}", job.0.id.to_string()).repeat(job.1 as usize)
-            })
-            .collect::<Vec<_>>()
-            .join("");
-        println!("{: >lcol$} | {}", job_ids, x_c);
+    if log_enabled!(Trace) {
+        let digits_per_job_id = (job_len - 1).to_string().len();
+        let lcol = max(4, digits_per_job_id * m);
+        trace!("{: >lcol$} | Length", "Jobs");
+        trace!("{:->lcol$}---{}", "-", "-".repeat(19));
+        for (c, x_c) in x.0.iter() {
+            let job_ids = c
+                .jobs
+                .iter()
+                .map(|job| {
+                    format!("{: >digits_per_job_id$}", job.0.id.to_string()).repeat(job.1 as usize)
+                })
+                .collect::<Vec<_>>()
+                .join("");
+            trace!("{: >lcol$} | {}", job_ids, x_c);
+        }
     }
 }
 fn print_gen_selection(job_len: usize, m: usize, r: f64, x: &GeneralizedSelection) {
-    let digits_per_job_id = (job_len - 1).to_string().len();
-    let digits_per_machine = m.to_string().len();
-    let resource_precision = 2;
-    let digits_per_resource = r.ceil().to_string().len() + 1 + resource_precision;
-    let lcol = max("Jobs".len(), digits_per_job_id * m);
-    let mcol = max(
-        "w=(m,r)".len(),
-        1 + digits_per_machine + ", ".len() + digits_per_resource + 1,
-    );
-    println!("{:>lcol$} | {:<mcol$} | Length", "Jobs", "w=(m,r)",);
-    println!("{:->lcol$}---{:-<mcol$}---{}", "-", "-", "-".repeat(19));
-    for (c, x_c) in x.configurations.iter() {
-        let job_ids = c
-            .configuration
-            .jobs
-            .iter()
-            .map(|job| {
-                format!("{:>digits_per_job_id$}", job.0.id.to_string()).repeat(job.1 as usize)
-            })
-            .collect::<Vec<_>>()
-            .join("");
-        let win = format!(
-            "({:>digits_per_machine$}, {:>digits_per_resource$})",
-            c.window.machine_count,
-            format!("{:.resource_precision$}", c.window.resource_amount)
+    if log_enabled!(Trace) {
+        let digits_per_job_id = (job_len - 1).to_string().len();
+        let digits_per_machine = m.to_string().len();
+        let resource_precision = 2;
+        let digits_per_resource = r.ceil().to_string().len() + 1 + resource_precision;
+        let lcol = max("Jobs".len(), digits_per_job_id * m);
+        let mcol = max(
+            "w=(m,r)".len(),
+            1 + digits_per_machine + ", ".len() + digits_per_resource + 1,
         );
-        println!("{:>lcol$} | {win} | {}", job_ids, x_c);
+        trace!("{:>lcol$} | {:<mcol$} | Length", "Jobs", "w=(m,r)",);
+        trace!("{:->lcol$}---{:-<mcol$}---{}", "-", "-", "-".repeat(19));
+        for (c, x_c) in x.configurations.iter() {
+            let job_ids = c
+                .configuration
+                .jobs
+                .iter()
+                .map(|job| {
+                    format!("{:>digits_per_job_id$}", job.0.id.to_string()).repeat(job.1 as usize)
+                })
+                .collect::<Vec<_>>()
+                .join("");
+            let win = format!(
+                "({:>digits_per_machine$}, {:>digits_per_resource$})",
+                c.window.machine_count,
+                format!("{:.resource_precision$}", c.window.resource_amount)
+            );
+            trace!("{:>lcol$} | {win} | {}", job_ids, x_c);
+        }
     }
 }
 
@@ -471,7 +479,7 @@ fn solve_block_problem_ilp(q: &Vec<f64>, problem_data: &ProblemData) -> Configur
         .map(|(job, var)| (job, solution.value(var) as i32))
         .filter(|(_, var)| *var != 0)
         .collect();
-    println!("Solved ILP for {} items with {:?}", q.len(), a_star);
+    trace!("Solved ILP for {} items with {:?}", q.len(), a_star);
     Configuration::new(a_star)
 }
 
@@ -608,9 +616,9 @@ impl Ilp {
 }
 
 fn reduce_to_basic_solution(x: Selection) -> Selection {
-    println!("Reducing to basic solution");
+    debug!("Reducing to basic solution");
     // TODO: put the output of this ILP_kkp into a simplex implementation in order to obtain a basic solution
-    println!("Done reducing to basic solution");
+    debug!("Done reducing to basic solution");
     x
 }
 
@@ -849,17 +857,17 @@ fn reduce_resource_amounts(
     x_tilde: &GeneralizedSelection,
     y_tilde: &NarrowJobSelection,
 ) -> (GeneralizedSelection, NarrowJobSelection) {
-    println!("Reducing resource amounts");
+    debug!("Reducing resource amounts");
     let (p_pre, k) = group_by_machine_count(problem, x_tilde);
 
-    println!("p_pre={p_pre}");
+    debug!("p_pre={p_pre}");
     let step_width = problem.epsilon_prime_squared * p_pre;
-    println!("Step width is {step_width}");
+    debug!("Step width is {step_width}");
 
     let (stacks, narrow_jobs): (Vec<GeneralizedSelection>, Vec<NarrowJobSelection>) = k
         .into_iter()
         .map(|(x_c, k_i)| {
-            println!("  Processing generalized selection with x_c={x_c}");
+            trace!("  Processing generalized selection with x_c={x_c}");
             let (sel, narrow, _, _, _) = k_i
                 .configurations
                 .into_iter()
@@ -878,36 +886,35 @@ fn reduce_resource_amounts(
                         vec![],
                     ),
                     |(mut wide_sel, mut narrow_sel, e_c, mut window, mut k_i), (c, mut p)| {
-                        println!("    Processing configuration {:?} with p={p}", c);
+                        trace!("    Processing configuration {:?} with p={p}", c);
                         let s_c = e_c - p;
                         let cur_step = (e_c / step_width).floor();
                         let next_step = (s_c / step_width).floor();
                         let is_cut = cur_step != next_step;
 
-                        println!("    s_c={s_c} --- {e_c}=e_c");
-                        print!("    current={cur_step} --- {next_step}=next");
+                        trace!("    s_c={s_c} --- {e_c}=e_c");
                         if is_cut {
-                            println!(" ++ CUT! ++");
+                            trace!("    current={cur_step} --- {next_step}=next ++ CUT! ++");
                         } else {
-                            println!();
+                            trace!("    current={cur_step} --- {next_step}=next");
                         }
 
                         k_i.push(c.clone());
 
                         if is_cut {
                             let lowest_cut = (s_c / step_width).ceil() * step_width;
-                            println!("    lowest cut={lowest_cut}");
+                            trace!("    lowest cut={lowest_cut}");
                             let p_w_ik: f64 = k_i
                                 .iter()
                                 .map(|k_ik| {
-                                    println!(
+                                    trace!(
                                         "    Adding narrow jobs from K_ik by window {:?}",
                                         k_ik.window
                                     );
                                     for (narrow_job, amount) in
                                         y_tilde.get_jobs_by_window(&k_ik.window).iter()
                                     {
-                                        println!(
+                                        trace!(
                                             "      Adding {:?} with amount={amount}",
                                             narrow_job
                                         );
@@ -929,11 +936,11 @@ fn reduce_resource_amounts(
                             let phi_down = w_down / p_w_ik;
                             let phi_up = 1.0 - phi_down;
                             let next_window = c.window;
-                            println!("    Next window will be {:?}", c.window);
+                            trace!("    Next window will be {:?}", c.window);
 
-                            println!("    Adding narrow jobs by window {:?}", window);
+                            trace!("    Adding narrow jobs by window {:?}", window);
                             for (narrow_job, amount) in y_tilde.get_jobs_by_window(&window).iter() {
-                                println!(
+                                trace!(
                                     "      Adding {:?} with amount={} to current window",
                                     narrow_job,
                                     *amount * phi_up
@@ -947,7 +954,7 @@ fn reduce_resource_amounts(
                                 );
                                 // TODO: this also has to happen for the last window (R,m), which should be
                                 // x_bar(emptyset, (R,m)) = x_tilde(emptyset, (R,m)) + epsilon_prime * P_pre
-                                println!(
+                                trace!(
                                     "      Adding {:?} with amount={} to next window",
                                     narrow_job,
                                     *amount * phi_down
@@ -963,7 +970,7 @@ fn reduce_resource_amounts(
 
                             let highest_cut = cur_step * step_width;
                             let p_diff = e_c - highest_cut;
-                            println!("    Adding generalized config with x_c={p_diff}");
+                            trace!("    Adding generalized config with x_c={p_diff}");
                             wide_sel.push(
                                 GeneralizedConfiguration {
                                     configuration: c.configuration.clone(),
@@ -976,7 +983,7 @@ fn reduce_resource_amounts(
                             p -= p_diff;
                         }
 
-                        println!("    Adding generalized config with x_c={p}");
+                        trace!("    Adding generalized config with x_c={p}");
                         wide_sel.push(
                             GeneralizedConfiguration {
                                 configuration: c.configuration,
@@ -985,33 +992,33 @@ fn reduce_resource_amounts(
                             p,
                         );
 
-                        println!("    Done processing configuration, p is now {p}");
+                        trace!("    Done processing configuration, p is now {p}");
                         (wide_sel, narrow_sel, s_c, window, k_i)
                     },
                 );
-            println!(
+            trace!(
                 "  Obtained a selection with {} wide jobs and a selection with {} narrow jobs",
                 sel.configurations.len(),
                 narrow.processing_times.len()
             );
-            println!("  Done processing generalized selection with x_c={x_c}");
+            trace!("  Done processing generalized selection with x_c={x_c}");
             (sel, narrow)
         })
         .unzip();
 
-    println!("Done creating {} stacks:", stacks.len());
+    debug!("Done creating {} stacks", stacks.len());
     for (i, stack) in stacks.iter().enumerate() {
-        println!("  --- K_{i} ---  ");
+        trace!("  --- K_{i} ---  ");
         for (config, x_c) in stack.configurations.iter() {
-            println!("{:?}: {}", config, x_c);
+            trace!("{:?}: {}", config, x_c);
         }
     }
 
-    println!("Merging configurations");
+    debug!("Merging configurations");
     let wide = GeneralizedSelection::merge(stacks);
     let narrow = NarrowJobSelection::merge(narrow_jobs);
-    println!("Done merging configurations");
-    println!(
+    debug!("Done merging configurations");
+    debug!(
         "Done reducing resource amounts resulting in {} entries in the wide job selection and {} entries in the narrow job selection",
          wide.configurations.len(), narrow.processing_times.len());
     (wide, narrow)
@@ -1021,11 +1028,11 @@ fn group_by_machine_count(
     problem: &ProblemData,
     x_tilde: &GeneralizedSelection,
 ) -> (f64, Vec<(f64, GeneralizedSelection)>) {
-    println!("Grouping by machine count");
+    debug!("Grouping by machine count");
     let m: usize = problem.machine_count_usize;
-    println!("m={} and 1/e'={}", m, problem.one_over_epsilon_prime);
+    debug!("m={} and 1/e'={}", m, problem.one_over_epsilon_prime);
     let k_len = min(m, problem.one_over_epsilon_prime as usize);
-    println!("Creating {k_len} sets");
+    debug!("Creating {k_len} sets");
     // List of K_i sets with pre-computed P_pre(K_i) per set, where i than the number of machines
     let mut k: Vec<(f64, GeneralizedSelection)> = vec![(0.0, GeneralizedSelection::empty()); k_len];
     // TODO: this also has to happen for the last window (R,m), which should be
@@ -1037,7 +1044,7 @@ fn group_by_machine_count(
         .filter(|(c, _)| c.configuration.machine_count > 0)
     {
         let group = c.configuration.machine_count as usize - 1;
-        println!(
+        trace!(
             "{group} machines used in config {:?} which was selected {x_c}",
             c
         );
@@ -1045,15 +1052,15 @@ fn group_by_machine_count(
         k[group].0 += x_c;
         k[group].1.push(c.clone(), *x_c);
     }
-    println!("Done creating sets with p_pre={p_pre}");
+    debug!("Done creating sets with p_pre={p_pre}");
 
-    println!("Sorting groups");
+    debug!("Sorting groups");
     for (_, k_i) in k.iter_mut() {
         k_i.sort_by_resource_amount();
     }
-    println!("Done sorting groups");
+    debug!("Done sorting groups");
 
-    println!("Done grouping by machine count");
+    debug!("Done grouping by machine count");
     (p_pre, k)
 }
 
@@ -1092,7 +1099,7 @@ fn group_by_resource_amount(problem: &ProblemData) -> Grouping {
     } = *problem;
 
     let group_size = epsilon_prime_squared as f64;
-    println!(
+    debug!(
         "Grouping by resource amount into groups of size {}",
         group_size
     );
@@ -1121,7 +1128,7 @@ fn group_by_resource_amount(problem: &ProblemData) -> Grouping {
     }
 
     let g = Grouping::new(groups);
-    println!("Created {} groups", g.groups.len());
+    debug!("Created {} groups", g.groups.len());
     g
 }
 
@@ -1130,7 +1137,7 @@ fn integral_schedule(
     x_bar: GeneralizedSelection,
     y_bar: NarrowJobSelection,
 ) -> Schedule {
-    println!("Computing integral schedule");
+    debug!("Computing integral schedule");
     let ProblemData {
         p_max,
         machine_count_usize,
@@ -1150,7 +1157,7 @@ fn integral_schedule(
     };
 
     // Group wide jobs by windows
-    println!(
+    debug!(
         "Grouping {} entries in x_hat by windows",
         x_hat.configurations.len()
     );
@@ -1163,43 +1170,46 @@ fn integral_schedule(
                 .push((sel.0.configuration, sel.1));
             agg
         });
-    println!("Obtained {} window groups", window_groups.len());
+    debug!("Obtained {} window groups", window_groups.len());
 
     let narrow_jobs_by_window = y_bar.find_max_occurrences();
 
     // Put wide jobs into chunks
     let mut groups = group_by_resource_amount(problem);
-    println!("{:?}", groups.groups);
-    println!("Finding jobs");
+    trace!("{:?}", groups.groups);
+    debug!("Finding jobs");
     for (win, configs) in window_groups {
-        println!("+++ Looking at window {:?}", win);
-        println!("Creating chunks with wide jobs");
+        debug!("+++ Looking at window {:?}", win);
+        debug!("Creating chunks with wide jobs");
         let mut chunks: Vec<(ScheduleChunk, f64)> = configs
             .into_iter()
             .map(|(c, x_c)| {
                 let mut chunk = s.make_chunk();
-                println!("  Adding config {:?} with x_c={}", c, x_c);
+                trace!("  Adding config {:?} with x_c={}", c, x_c);
                 for (machine, job) in c
                     .jobs
                     .into_iter()
                     .flat_map(|(job, i)| repeat(job).take(i as usize))
                     .enumerate()
                 {
-                    print!("    Finding location for {:?} ...", job);
-                    if let Some(job) = groups.next(job) {
-                        println!(" found {}, adding it to machine {machine}", job.id);
-                        chunk.add(machine, job);
+                    if let Some(found_job) = groups.next(job) {
+                        trace!(
+                            "    Found location {} for job {:?}, adding it to machine {machine}",
+                            found_job.id,
+                            job
+                        );
+                        chunk.add(machine, found_job);
                     } else {
-                        println!(" no matching job found in grouping!");
+                        trace!("    No matching job found in grouping for job {:?}!", job);
                     }
                 }
                 (chunk, x_c)
             })
             .collect();
-        println!("Done creating {} chunks with wide jobs", chunks.len());
+        debug!("Done creating {} chunks with wide jobs", chunks.len());
 
         // Put narrow jobs into windows
-        println!("Adding narrow jobs");
+        debug!("Adding narrow jobs");
         let mut narrow_jobs = narrow_jobs_by_window.get(&win).unwrap_or(&vec![]).clone();
         let narrow_job_count = narrow_jobs.len();
         narrow_jobs.sort_by(|(job0, _), (job1, _)| {
@@ -1208,7 +1218,7 @@ fn integral_schedule(
                 .expect("bad resource amount, cannot sort")
                 .reverse() // sort by decreasing resource amount
         });
-        println!(
+        debug!(
             "Found jobs {:?} for window {:?}",
             narrow_jobs.iter().map(|pair| pair.0).collect::<Vec<_>>(),
             win
@@ -1217,36 +1227,38 @@ fn integral_schedule(
         let mut target_chunk = 0;
         let mut target_machine = machine_count_usize - 1;
         for (job, p) in narrow_jobs {
-            println!(
+            trace!(
                 "  Looking at {:?} with processing time {} which is scheduled for {}",
-                job, job.processing_time, p
+                job,
+                job.processing_time,
+                p
             );
             if job.processing_time < p {
-                println!("  Adding {:?} to 0 (full chunk)", job);
+                trace!("  Adding {:?} to 0 (full chunk)", job);
                 full_chunk.add(0, job)
             } else {
                 if used_processing_time + job.processing_time > chunks[target_chunk].1 {
                     used_processing_time = 0.0;
                     if target_chunk == chunks.len() - 1 {
-                        println!("  Machine {target_machine} full, stepping back");
+                        trace!("  Machine {target_machine} full, stepping back");
                         target_chunk = 0;
                         target_machine -= 1;
                     } else {
                         target_chunk += 1;
                     }
                 }
-                println!("  Adding {:?} to {target_machine}", job);
+                trace!("  Adding {:?} to {target_machine}", job);
                 chunks[target_chunk].0.add(target_machine, job);
                 used_processing_time += job.processing_time;
             }
         }
-        println!("Done adding {narrow_job_count} narrow jobs");
+        debug!("Done adding {narrow_job_count} narrow jobs");
         s.push_all(chunks.into_iter().map(|(chunk, _)| chunk).collect());
-        println!("Done looking at window {:?}", win);
+        debug!("Done looking at window {:?}", win);
     }
 
     s.push(full_chunk);
 
-    println!("Done creating integral schedule");
+    debug!("Done creating integral schedule");
     s
 }
