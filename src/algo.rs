@@ -4,10 +4,7 @@ use good_lp::{
     SolverModel, Variable,
 };
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
-use log::{
-    debug, log_enabled, trace,
-    Level::{Info, Trace},
-};
+use log::{debug, log_enabled, trace, Level};
 use std::{
     cmp::{max, min, Ordering},
     collections::{HashMap, HashSet},
@@ -344,7 +341,7 @@ fn max_min(problem_data: &ProblemData) -> Selection {
         ..
     } = *problem_data;
 
-    let progress_bar = !log_enabled!(Info);
+    let progress_bar = !log_enabled!(Level::Debug);
     if progress_bar {
         println!(
             "{} Finding initial solution ...",
@@ -433,7 +430,7 @@ fn max_min(problem_data: &ProblemData) -> Selection {
     x
 }
 fn print_selection(job_len: usize, m: usize, x: &Selection) {
-    if log_enabled!(Trace) {
+    if log_enabled!(Level::Trace) {
         let digits_per_job_id = (job_len - 1).to_string().len();
         let lcol = max(4, digits_per_job_id * m);
         trace!("{: >lcol$} | Length", "Jobs");
@@ -452,7 +449,7 @@ fn print_selection(job_len: usize, m: usize, x: &Selection) {
     }
 }
 fn print_gen_selection(job_len: usize, m: usize, r: f64, x: &GeneralizedSelection) {
-    if log_enabled!(Trace) {
+    if log_enabled!(Level::Trace) {
         let digits_per_job_id = (job_len - 1).to_string().len();
         let digits_per_machine = m.to_string().len();
         let resource_precision = 2;
@@ -672,7 +669,7 @@ fn generalize(problem: &ProblemData, x: Selection) -> (GeneralizedSelection, Nar
         .filter(|job| !problem.is_wide(job))
         .copied()
         .collect();
-    let progress_bar = !log_enabled!(Info);
+    let progress_bar = !log_enabled!(Level::Debug);
     if progress_bar {
         println!("{} Generalizing ...", style("[3/5]").bold().dim());
     }
@@ -919,7 +916,7 @@ fn reduce_resource_amounts(
     let step_width = problem.epsilon_prime_squared * p_pre;
     debug!("Step width is {step_width}");
 
-    let progress_bar = !log_enabled!(Info);
+    let progress_bar = !log_enabled!(Level::Debug);
     if progress_bar {
         println!(
             "{} Reducing resource amounts ...",
@@ -1217,7 +1214,7 @@ fn integral_schedule(
 
     let mut full_chunk = s.make_chunk();
 
-    if !log_enabled!(Info) {
+    if !log_enabled!(Level::Debug) {
         println!(
             "{} Computing integral schedule ...",
             style("[5/5]").bold().dim()
