@@ -53,7 +53,7 @@ fn main() {
     }
 }
 
-fn compare_jobs_before_and_after_schedule(mut jobs: Box<Vec<InstanceJob>>, schedule: Schedule) {
+fn compare_jobs_before_and_after_schedule(mut jobs: Vec<InstanceJob>, schedule: Schedule) {
     let mut scheduled_jobs: Vec<Job> = schedule
         .chunks
         .into_iter()

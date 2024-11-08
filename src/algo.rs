@@ -17,7 +17,7 @@ pub struct Instance {
     pub epsilon: f64,
     pub machine_count: i32,
     pub resource_limit: f64,
-    pub jobs: Box<Vec<InstanceJob>>,
+    pub jobs: Vec<InstanceJob>,
 }
 #[derive(Debug, Copy, Clone)]
 pub struct InstanceJob {
