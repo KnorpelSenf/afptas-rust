@@ -1,12 +1,17 @@
+use console::style;
 use good_lp::{
     constraint, default_solver, variable, variables, Expression, ProblemVariables, Solution,
     SolverModel, Variable,
 };
-use log::{debug, log_enabled, trace, Level::Trace};
+use indicatif::{ProgressBar, ProgressState, ProgressStyle};
+use log::{
+    debug, log_enabled, trace,
+    Level::{Info, Trace},
+};
 use std::{
     cmp::{max, min, Ordering},
     collections::{HashMap, HashSet},
-    fmt::Debug,
+    fmt::{Debug, Write},
     hash::{Hash, Hasher},
     iter::repeat,
     vec,
@@ -334,20 +339,55 @@ fn max_min(problem_data: &ProblemData) -> Selection {
         epsilon,
         epsilon_squared,
         epsilon_prime,
+        one_over_epsilon_prime,
         ref jobs,
         ..
-    } = problem_data;
+    } = *problem_data;
+
+    let progress_bar = !log_enabled!(Info);
+    if progress_bar {
+        println!(
+            "{} Finding initial solution ...",
+            style("[1/5]").bold().dim()
+        );
+    }
     // compute initial solution;
     debug!("Computing initial solution");
     let m = jobs.len();
+    let pb = if progress_bar {
+        ProgressBar::new(m as u64)
+    } else {
+        ProgressBar::hidden()
+    };
     let mut x = Selection::init((0..m).map(|i| {
+        pb.inc(1);
         (
             solve_block_problem_ilp(&unit(i, m), &problem_data),
             1.0 / m as f64,
         )
     }));
+    pb.finish_and_clear();
     debug!("Done computing initial solution");
     trace!("Initial value is {x:?}");
+
+    if progress_bar {
+        println!("{} Improving solution ...", style("[2/5]").bold().dim());
+    }
+
+    let pb = if progress_bar {
+        ProgressBar::new(one_over_epsilon_prime as u64 * 10000).with_style(
+            ProgressStyle::with_template(&format!(
+                "[{{elapsed_precise}}] {{spinner}} Approaching {} ... {{msg}}",
+                epsilon_prime
+            ))
+            .unwrap()
+            .with_key("eta", |state: &ProgressState, w: &mut dyn Write| {
+                write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap()
+            }),
+        )
+    } else {
+        ProgressBar::hidden()
+    };
 
     debug!("Iterating until v < {epsilon_prime} = epsilon_prime");
     // iterate
@@ -356,8 +396,8 @@ fn max_min(problem_data: &ProblemData) -> Selection {
         trace!("f(x) = {fx:?}");
         // price vector
         let prec = epsilon_squared / (m as f64);
-        let theta = find_theta(*epsilon_prime, &fx, prec);
-        let price = compute_price(&fx, *epsilon_prime, theta);
+        let theta = find_theta(epsilon_prime, &fx, prec);
+        let price = compute_price(&fx, epsilon_prime, theta);
         trace!("++ Starting iteration with price {price:?}");
         // solve block problem
         let config = solve_block_problem_ilp(&price, &problem_data);
@@ -368,18 +408,21 @@ fn max_min(problem_data: &ProblemData) -> Selection {
 
         // compute v
         let v = compute_v(&price, &fx, &fy);
+        pb.set_position((10000.0 / v) as u64);
+        pb.set_message(v.to_string());
         debug!("v = {v}");
-        if v < *epsilon_prime {
+        if v < epsilon_prime {
             let λ_hat = fx
                 .iter()
                 .min_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
                 .unwrap_or(&1.0);
             debug!("λ^ = {}", λ_hat);
+            pb.finish_and_clear();
             x.scale(1.0 / λ_hat);
             break;
         }
         // update solution = ((1-tau) * solution) + (tau * solution)
-        let tau = line_search(&fx, &fy, theta, *epsilon_prime, *epsilon);
+        let tau = line_search(&fx, &fy, theta, epsilon_prime, epsilon);
         x.interpolate(y, tau);
         trace!(
             "Updated solution with step length tau={} to be {:?}",
@@ -629,9 +672,21 @@ fn generalize(problem: &ProblemData, x: Selection) -> (GeneralizedSelection, Nar
         .filter(|job| !problem.is_wide(job))
         .copied()
         .collect();
+    let progress_bar = !log_enabled!(Info);
+    if progress_bar {
+        println!("{} Generalizing ...", style("[3/5]").bold().dim());
+    }
+    let pb = if progress_bar {
+        ProgressBar::new(x.0.len() as u64)
+    } else {
+        ProgressBar::hidden()
+    };
     let (x_tilde, y_tilde) =
         x.0.iter()
-            .map(|(c, x_c)| (c, c.reduce_to_wide_jobs(problem), x_c))
+            .map(|(c, x_c)| {
+                pb.inc(1);
+                (c, c.reduce_to_wide_jobs(problem), x_c)
+            })
             .fold(
                 (HashMap::new(), NarrowJobSelection::empty()),
                 |(mut acc_x, mut acc_y), (c, c_w, x_c)| {
@@ -864,9 +919,23 @@ fn reduce_resource_amounts(
     let step_width = problem.epsilon_prime_squared * p_pre;
     debug!("Step width is {step_width}");
 
+    let progress_bar = !log_enabled!(Info);
+    if progress_bar {
+        println!(
+            "{} Reducing resource amounts ...",
+            style("[4/5]").bold().dim()
+        );
+    }
+    let pb = if progress_bar {
+        ProgressBar::new(k.len() as u64)
+    } else {
+        ProgressBar::hidden()
+    };
+
     let (stacks, narrow_jobs): (Vec<GeneralizedSelection>, Vec<NarrowJobSelection>) = k
         .into_iter()
         .map(|(x_c, k_i)| {
+            pb.inc(1);
             trace!("  Processing generalized selection with x_c={x_c}");
             let (sel, narrow, _, _, _) = k_i
                 .configurations
@@ -1005,6 +1074,7 @@ fn reduce_resource_amounts(
             (sel, narrow)
         })
         .unzip();
+    pb.finish_and_clear();
 
     debug!("Done creating {} stacks", stacks.len());
     for (i, stack) in stacks.iter().enumerate() {
@@ -1146,6 +1216,13 @@ fn integral_schedule(
     let mut s = Schedule::empty(problem);
 
     let mut full_chunk = s.make_chunk();
+
+    if !log_enabled!(Info) {
+        println!(
+            "{} Computing integral schedule ...",
+            style("[5/5]").bold().dim()
+        );
+    }
 
     // Add p_max everywhere
     let x_hat = GeneralizedSelection {
