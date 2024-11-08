@@ -658,10 +658,6 @@ struct Window {
     machine_count: i32,
 }
 impl Window {
-    fn is_full(&self, problem: &ProblemData) -> bool {
-        self.machine_count == problem.machine_count
-            && self.resource_amount == problem.resource_limit
-    }
     fn empty() -> Self {
         Window {
             resource_amount: 0.0,
