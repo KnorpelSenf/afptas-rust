@@ -7,6 +7,8 @@ use std::iter::Iterator;
 
 use clap::Parser;
 
+use log::debug;
+
 use crate::algo::Instance;
 use crate::algo::InstanceJob;
 
@@ -36,7 +38,7 @@ struct Args {
 
 pub fn parse() -> (bool, Instance) {
     let args = Args::parse();
-    println!("Parsing input data");
+    debug!("Parsing input data");
 
     let is_stdin = args.job_file == "-";
     let job_file: Vec<String> = if is_stdin {

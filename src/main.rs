@@ -8,11 +8,16 @@ use std::time::Instant;
 
 use algo::{InstanceJob, Job, Schedule};
 
+use env_logger::{Builder, Target::Stdout};
+use log::{debug, info};
+
 use crate::algo::{compute_schedule, Instance};
 use crate::in_data::parse;
 use crate::pretty::{display, pretty, svg};
 
 fn main() {
+    Builder::from_default_env().target(Stdout).init();
+
     let (to_svg, instance) = parse();
 
     let Instance {
@@ -22,17 +27,17 @@ fn main() {
         ref jobs,
     } = instance;
     let job_count = jobs.len();
-    println!("Scheduling {job_count} jobs on {machine_count} machines with a resource limit of {resource_limit} with epsilon={epsilon} close to OPT");
+    info!("Scheduling {job_count} jobs on {machine_count} machines with a resource limit of {resource_limit} and epsilon={epsilon}");
 
     let job_backup = jobs.clone();
     let start = Instant::now();
     let schedule = compute_schedule(instance);
     let duration = start.elapsed();
 
-    println!("Asserting that all jobs are scheduled");
+    debug!("Asserting that all jobs are scheduled");
     compare_jobs_before_and_after_schedule(job_backup, schedule.clone());
 
-    println!("Done in {:?}.", duration);
+    info!("Done in {:?}.", duration);
     if to_svg {
         let file_data = svg(resource_limit, schedule);
         create_dir_all("./schedules/").expect("cannot create directory ./schedules");
