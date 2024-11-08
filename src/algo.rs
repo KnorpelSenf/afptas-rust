@@ -302,6 +302,7 @@ impl Selection {
             s.0.len() == 1,
             "Newly chosen selection must contain exactly one configuration"
         );
+        // ((1-tau) * solution) + (tau * solution)
         self.scale(1.0 - tau);
         s.0.into_iter().for_each(|(c, v)| {
             let old = self.0.get(&c).unwrap_or(&0.0);
@@ -376,10 +377,6 @@ fn max_min(problem_data: &ProblemData) -> Selection {
         }
         // update solution = ((1-tau) * solution) + (tau * solution)
         let tau = line_search(&fx, &fy, theta, *epsilon_prime, *epsilon);
-        // let one_minus_tau = 1.0 - tau;
-        // for i in 0..jobs.len() {
-        // solution[i] = one_minus_tau * solution[i] + tau * solution[i]
-        // }
         x.interpolate(y, tau);
         println!(
             "Updated solution with step length tau={} to be {:?}",
