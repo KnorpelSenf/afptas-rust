@@ -145,12 +145,26 @@ text { font-family:monospace; font-size:10px; fill:black; }
             ),
         |doc, header| doc.add(header),
     );
+
+    // Find highest used resource amount for scaling the job colors.
+    let max_resource_amount = schedule
+        .chunks
+        .iter()
+        .flat_map(|chunk| {
+            chunk
+                .machines
+                .iter()
+                .flat_map(|machine| machine.jobs.iter().map(|job| job.resource_amount))
+        })
+        .max_by(|r0, r1| r0.partial_cmp(r1).expect("cannot compare resource amout"))
+        .unwrap_or(resource_limit);
+
     // Create the SVG document
     let (document, height) = schedule
         .chunks
         .into_iter()
         .fold((chart, TOP_MARGIN), |(doc, off), chunk| {
-            add_chunk_to_doc(resource_limit, doc, off, chunk)
+            add_chunk_to_doc(max_resource_amount, doc, off, chunk)
         });
 
     let body = document
@@ -171,7 +185,7 @@ text { font-family:monospace; font-size:10px; fill:black; }
 }
 
 fn add_chunk_to_doc(
-    resource_limit: f64,
+    max_resource_amount: f64,
     document: SVG,
     vertical_offset: usize,
     chunk: ScheduleChunk,
@@ -181,14 +195,14 @@ fn add_chunk_to_doc(
         |(doc, max_height), (machine, schedule)| {
             let x = LEFT_MARGIN + machine * (MACHINE_WIDTH + MACHINE_SPACING);
             let y = vertical_offset;
-            let (svg, height) = add_machine_to_doc(resource_limit, doc, x, y, schedule);
+            let (svg, height) = add_machine_to_doc(max_resource_amount, doc, x, y, schedule);
             (svg, max(height, max_height))
         },
     )
 }
 
 fn add_machine_to_doc(
-    resource_limit: f64,
+    max_resource_amount: f64,
     document: SVG,
     x: usize,
     y: usize,
@@ -198,7 +212,7 @@ fn add_machine_to_doc(
         .jobs
         .into_iter()
         .fold((document, y), |(doc, off), job| {
-            let (element, h) = create_machine(resource_limit, job, x, off);
+            let (element, h) = create_machine(max_resource_amount, job, x, off);
             (doc.add(element), off + h)
         })
 }
@@ -214,10 +228,10 @@ fn create_machine_header(i: usize) -> Text {
         .set("class", "machine-header")
 }
 
-fn create_machine(resource_limit: f64, job: Job, x: usize, y: usize) -> (Group, usize) {
+fn create_machine(max_resource_amount: f64, job: Job, x: usize, y: usize) -> (Group, usize) {
     let w = MACHINE_WIDTH;
     let h = MACHINE_HEIGHT_SCALE * job.processing_time as usize;
-    let lightness = 50.0f32 + 25.0f32 * (job.resource_amount / resource_limit) as f32;
+    let lightness = 95.0 - 65.0 * (job.resource_amount / max_resource_amount);
     let machine_box = Rectangle::new()
         .set("x", x)
         .set("y", y)
@@ -225,7 +239,7 @@ fn create_machine(resource_limit: f64, job: Job, x: usize, y: usize) -> (Group, 
         .set("height", h)
         .set(
             "fill",
-            Hsl::from(240.0, 100.0, lightness)
+            Hsl::from(240.0, 100.0, lightness as f32)
                 .to_rgb()
                 .to_css_hex_string(),
         )
