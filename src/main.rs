@@ -18,7 +18,7 @@ use crate::pretty::{display, pretty, svg};
 fn main() {
     Builder::from_default_env().target(Stdout).init();
 
-    let (to_svg, instance) = parse();
+    let (to_svg, open, instance) = parse();
 
     let Instance {
         epsilon,
@@ -48,6 +48,13 @@ fn main() {
         file.write_all(file_data.as_bytes())
             .expect(&format!("cannot write to file {path}"));
         println!("Result is written to {path}");
+        if open {
+            if let Err(e) = open::that(path) {
+                println!("Could not open browser!, {:#?}", e);
+            } else {
+                println!("Opened SVG in browser");
+            }
+        }
     } else if job_count <= 1000 {
         println!("Result is (prettified):");
         println!("{}", pretty(schedule));

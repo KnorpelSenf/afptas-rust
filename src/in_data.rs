@@ -34,9 +34,13 @@ struct Args {
     /// Render the schedule to an SVG file called "schedule.svg"
     #[arg(long)]
     svg: bool,
+
+    /// Open the rendered SVG if created
+    #[arg(long)]
+    open: bool,
 }
 
-pub fn parse() -> (bool, Instance) {
+pub fn parse() -> (bool, bool, Instance) {
     let args = Args::parse();
     debug!("Parsing input data");
 
@@ -89,6 +93,7 @@ pub fn parse() -> (bool, Instance) {
 
     (
         args.svg,
+        args.open,
         Instance {
             epsilon: args.epsilon,
             machine_count: args.machines,
