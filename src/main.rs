@@ -48,7 +48,7 @@ fn main() {
         file.write_all(file_data.as_bytes())
             .expect(&format!("cannot write to file {path}"));
         println!("Result is written to {path}");
-        println!("Trying to open file ...")
+        println!("Trying to open file ...");
         if open {
             if let Err(e) = open::that(path) {
                 println!("Could not open file!, {:#?}", e);
