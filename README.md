@@ -37,7 +37,7 @@ We used version `1.80.1`.
 This program relies on [CBC](https://github.com/rust-or/good_lp#cbc) to solve ILPs.
 It therefore requires you to have it installed on your system.
 
-On linux, run
+On Linux, run
 
 ```sh
 sudo apt update
@@ -59,7 +59,7 @@ On Windows, install WSL2 and goto Linux.
 ## Usage
 
 You can run the program with `cargo run`.
-Addition arguments need to be separated via `--`.
+Additional arguments need to be separated via `--`.
 
 For instance, you can inspect all program arguments of this CLI by running `cargo run -- --help`.
 
