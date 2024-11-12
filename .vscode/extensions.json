@@ -1,9 +1,9 @@
 {
-    "recommendations": [
-        "goessner.mdmath",
-        "bierner.markdown-checkbox",
-        "davidanson.vscode-markdownlint",
-        "stkb.rewrap",
-        "wayou.vscode-todo-highlight"
-    ]
+  "recommendations": [
+    "goessner.mdmath",
+    "bierner.markdown-checkbox",
+    "davidanson.vscode-markdownlint",
+    "stkb.rewrap",
+    "wayou.vscode-todo-highlight"
+  ]
 }
