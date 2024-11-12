@@ -3,7 +3,7 @@ use good_lp::{
     constraint, default_solver, variable, variables, Expression, ProblemVariables, Solution,
     SolverModel, Variable,
 };
-use indicatif::{ProgressBar, ProgressState, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressState, ProgressStyle};
 use log::{debug, log_enabled, trace, Level};
 use std::{
     cmp::{max, min, Ordering},
@@ -371,20 +371,75 @@ fn max_min(problem_data: &ProblemData) -> Selection {
         println!("{} Improving solution ...", style("[2/5]").bold().dim());
     }
 
-    let pb = if progress_bar {
-        ProgressBar::new(one_over_epsilon_prime as u64 * 10000).with_style(
-            ProgressStyle::with_template(&format!(
-                "[{{elapsed_precise}}] {{spinner}} Approaching {} ... {{msg}}",
-                epsilon_prime
-            ))
-            .unwrap()
-            .with_key("eta", |state: &ProgressState, w: &mut dyn Write| {
-                write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap()
-            }),
-        )
-    } else {
-        ProgressBar::hidden()
+    let pb = MultiProgress::new();
+    let eta = |state: &ProgressState, w: &mut dyn Write| {
+        write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap()
     };
+    let res = 10000;
+    let (pb_eps, pb_fx_l1, pb_fx_l2, pb_theta, pb_price_l1, pb_price_l2, pb_fy_l1, pb_fy_l2, pb_v) =
+        if progress_bar {
+            (
+                pb.add(
+                    ProgressBar::new(one_over_epsilon_prime as u64 * res).with_style(ProgressStyle::with_template(
+        "EPS [{elapsed_precise}] {spinner} {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+    )
+    .unwrap()
+    .with_key("eta", eta)),
+                ),
+                pb.add(ProgressBar::new(res).with_style(ProgressStyle::with_template(
+        "fx1 [{elapsed_precise}] {spinner} {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+    )
+    .unwrap()
+    .with_key("eta", eta))),
+                pb.add(ProgressBar::new(res).with_style(ProgressStyle::with_template(
+        "fx2 [{elapsed_precise}] {spinner} {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+    )
+    .unwrap()
+    .with_key("eta", eta))),
+                pb.add(ProgressBar::new(res).with_style(ProgressStyle::with_template(
+        "tet [{elapsed_precise}] {spinner} {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+    )
+    .unwrap()
+    .with_key("eta", eta))),
+                pb.add(ProgressBar::new(m as u64).with_style(ProgressStyle::with_template(
+        "pr1 [{elapsed_precise}] {spinner} {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+    )
+    .unwrap()
+    .with_key("eta", eta))),
+                pb.add(ProgressBar::new(res).with_style(ProgressStyle::with_template(
+        "pr2 [{elapsed_precise}] {spinner} {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+    )
+    .unwrap()
+    .with_key("eta", eta))),
+                pb.add(ProgressBar::new(res).with_style(ProgressStyle::with_template(
+        "fy1 [{elapsed_precise}] {spinner} {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+    )
+    .unwrap()
+    .with_key("eta", eta))),
+                pb.add(ProgressBar::new(res).with_style(ProgressStyle::with_template(
+        "fy2 [{elapsed_precise}] {spinner} {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+    )
+    .unwrap()
+    .with_key("eta", eta))),
+                pb.add(ProgressBar::new(res).with_style(ProgressStyle::with_template(
+        "v   [{elapsed_precise}] {spinner} {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+    )
+    .unwrap()
+    .with_key("eta", eta))),
+            )
+        } else {
+            (
+                ProgressBar::hidden(),
+                ProgressBar::hidden(),
+                ProgressBar::hidden(),
+                ProgressBar::hidden(),
+                ProgressBar::hidden(),
+                ProgressBar::hidden(),
+                ProgressBar::hidden(),
+                ProgressBar::hidden(),
+                ProgressBar::hidden(),
+            )
+        };
 
     debug!("Iterating until v < {epsilon_prime} = epsilon_prime");
     // iterate
@@ -405,8 +460,26 @@ fn max_min(problem_data: &ProblemData) -> Selection {
 
         // compute v
         let v = compute_v(&price, &fx, &fy);
-        pb.set_position((10000.0 / v) as u64);
-        pb.set_message(v.to_string());
+
+        let res = res as f64;
+        pb_eps.set_position((res / v) as u64);
+        pb_eps.set_message(format!("{:.6}", v));
+        pb_fx_l1.set_position((res * fx.iter().sum::<f64>()) as u64);
+        pb_fx_l1.set_message(format!("{:.6}", (fx.iter().sum::<f64>())));
+        pb_fx_l2.set_position((res * scalar_product(&fx, &fx).sqrt()) as u64);
+        pb_fx_l2.set_message(format!("{:.6}", scalar_product(&fx, &fx).sqrt()));
+        pb_theta.set_position((res * theta) as u64);
+        pb_theta.set_message(format!("{:.6}", theta));
+        pb_price_l1.set_position((price.iter().sum::<f64>()) as u64);
+        pb_price_l1.set_message(format!("{:.6}", price.iter().sum::<f64>()));
+        pb_price_l2.set_position((res * scalar_product(&price, &price).sqrt()) as u64);
+        pb_price_l2.set_message(format!("{:.6}", scalar_product(&price, &price).sqrt()));
+        pb_fy_l1.set_position((res * fy.iter().sum::<f64>()) as u64);
+        pb_fy_l1.set_message(format!("{:.6}", fy.iter().sum::<f64>()));
+        pb_fy_l2.set_position((res * scalar_product(&fy, &fy).sqrt()) as u64);
+        pb_fy_l2.set_message(format!("{:.6}", scalar_product(&fy, &fy).sqrt()));
+        pb_v.set_position((res * v) as u64);
+        pb_v.set_message(format!("{:.6}", v));
         debug!("v = {v}");
         if v < epsilon_prime {
             let λ_hat = fx
@@ -414,8 +487,8 @@ fn max_min(problem_data: &ProblemData) -> Selection {
                 .min_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal))
                 .unwrap_or(&1.0);
             debug!("λ^ = {}", λ_hat);
-            pb.finish_and_clear();
             x.scale(1.0 / λ_hat);
+            let _ = pb.clear();
             break;
         }
         // update solution = ((1-tau) * solution) + (tau * solution)
