@@ -194,7 +194,15 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     trace!("Narrow jobs are: {:?}", narrow_jobs);
 
     let job_len = problem_data.jobs.len();
-    let x = max_min(&problem_data);
+    let mut x = max_min(&problem_data);
+
+    if x.0.is_empty() {
+        trace!("No wide jobs, no configuration, creating empty window.");
+
+        x.0.insert(Configuration::new(vec![]), 1.0);
+        
+    }
+
     trace!("Max-min solved with:");
     print_selection(job_len, problem_data.machine_count_usize, &x);
     let x = reduce_to_basic_solution(x);
