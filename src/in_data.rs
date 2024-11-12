@@ -31,7 +31,7 @@ struct Args {
     #[arg(short, long)]
     job_file: String,
 
-    /// Render the schedule to an SVG file called "schedule.svg"
+    /// Render the schedule to an SVG file in the directory "schedules"
     #[arg(long)]
     svg: bool,
 
