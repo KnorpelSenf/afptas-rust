@@ -131,7 +131,7 @@ cargo run --releasea -- # ...
 
 We furthermore provide a script to generate large amounts of jobs.
 It is limited to generating pairs of processing time and resource amount.
-Both values are picked using a linear random distribution in two indepently configurable intervals.
+Both values are picked using a uniform random distribution in two indepently configurable intervals.
 
 ```sh
 # Setup (once)
