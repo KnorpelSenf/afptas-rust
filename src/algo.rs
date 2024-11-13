@@ -194,15 +194,7 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
     trace!("Narrow jobs are: {:?}", narrow_jobs);
 
     let job_len = problem_data.jobs.len();
-    let mut x = max_min(&problem_data);
-
-    if x.0.is_empty() {
-        trace!("No wide jobs, no configuration, creating empty window.");
-
-        x.0.insert(Configuration::new(vec![]), 1.0);
-        
-    }
-
+    let x = max_min(&problem_data);
     trace!("Max-min solved with:");
     print_selection(job_len, problem_data.machine_count_usize, &x);
     let x = reduce_to_basic_solution(x);
@@ -216,7 +208,9 @@ pub fn compute_schedule(instance: Instance) -> Schedule {
         problem_data.resource_limit,
         &x_tilde,
     );
-    let (x_bar, y_bar) = reduce_resource_amounts(&problem_data, &x_tilde, &y_tilde);
+    let (x_bar, y_bar) = reduce_resource_amounts(&problem_data, x_tilde, y_tilde);
+    debug!("x: {:?}", x_bar);
+
     // TODO: use x_bar, y_bar to find a basic solution to LP_w via simplex
     integral_schedule(&problem_data, x_bar, y_bar)
 }
@@ -914,11 +908,11 @@ impl NarrowJobSelection {
 
 fn reduce_resource_amounts(
     problem: &ProblemData,
-    x_tilde: &GeneralizedSelection,
-    y_tilde: &NarrowJobSelection,
+    x_tilde: GeneralizedSelection,
+    y_tilde: NarrowJobSelection,
 ) -> (GeneralizedSelection, NarrowJobSelection) {
     debug!("Reducing resource amounts");
-    let (p_pre, k) = group_by_machine_count(problem, x_tilde);
+    let (p_pre, k) = group_by_machine_count(problem, &x_tilde);
 
     debug!("p_pre={p_pre}");
     let step_width = problem.epsilon_prime_squared * p_pre;
@@ -1096,6 +1090,11 @@ fn reduce_resource_amounts(
     debug!(
         "Done reducing resource amounts resulting in {} entries in the wide job selection and {} entries in the narrow job selection",
          wide.configurations.len(), narrow.processing_times.len());
+
+    if wide.configurations.len() == 0 {
+        debug!("Empty wide job selection, falling back to x_tilde and y_tilde!");
+        return (x_tilde, y_tilde);
+    }
     (wide, narrow)
 }
 
